@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import networkx as nx
 from pydantic import BaseModel, Field, field_validator
@@ -17,9 +17,9 @@ class Pipeline(BaseModel):
     """Orchestrate machine learning workflows as directed acyclic graphs."""
 
     name: str
-    stages: List[Stage] = Field(default_factory=list)
+    stages: list[Stage] = Field(default_factory=list)
     graph: nx.DiGraph = Field(default_factory=nx.DiGraph, exclude=True)
-    config: Dict[str, Any] = Field(default_factory=dict)
+    config: dict[str, Any] = Field(default_factory=dict)
 
     class Config:
         arbitrary_types_allowed = True
@@ -59,7 +59,7 @@ class Pipeline(BaseModel):
                 return stage
         raise ValueError(f"Stage '{name}' not found in pipeline")
 
-    def get_execution_order(self) -> List[str]:
+    def get_execution_order(self) -> list[str]:
         """Get stages in topological execution order."""
         if not self.stages:
             return []
@@ -85,11 +85,11 @@ class Pipeline(BaseModel):
 
         return True
 
-    def run(self, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def run(self, context: dict[str, Any] | None = None) -> dict[str, Any]:
         """Execute the pipeline in topological order."""
         self.validate()
         context = context or {}
-        results: Dict[str, Any] = {}
+        results: dict[str, Any] = {}
 
         execution_order = self.get_execution_order()
         logger.info(f"Executing pipeline '{self.name}' with {len(execution_order)} stages")

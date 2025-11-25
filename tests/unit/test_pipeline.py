@@ -172,7 +172,7 @@ class TestPipeline:
         for i in range(n_stages - 1):
             if deps_added >= n_dependencies:
                 break
-            pipeline.add_dependency(f"stage_{i}", f"stage_{i+1}")
+            pipeline.add_dependency(f"stage_{i}", f"stage_{i + 1}")
             deps_added += 1
 
         assert pipeline.validate()

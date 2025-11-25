@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -16,16 +17,16 @@ class Stage(BaseModel, ABC):
 
     name: str
     description: str = ""
-    config: Dict[str, Any] = Field(default_factory=dict)
+    config: dict[str, Any] = Field(default_factory=dict)
     retry_count: int = Field(default=0, ge=0)
-    timeout: Optional[float] = Field(default=None, gt=0)
+    timeout: float | None = Field(default=None, gt=0)
 
     @abstractmethod
-    def execute(self, context: Dict[str, Any]) -> Any:
+    def execute(self, context: dict[str, Any]) -> Any:
         """Execute the stage with given context."""
         pass
 
-    def validate_inputs(self, context: Dict[str, Any]) -> bool:
+    def validate_inputs(self, context: dict[str, Any]) -> bool:
         """Validate stage inputs from context."""
         return True
 
@@ -37,7 +38,7 @@ class Stage(BaseModel, ABC):
 class FunctionStage(Stage):
     """Stage that wraps a Python function."""
 
-    func: Optional[Callable] = Field(default=None, exclude=True)
+    func: Callable | None = Field(default=None, exclude=True)
 
     class Config:
         arbitrary_types_allowed = True
@@ -47,7 +48,7 @@ class FunctionStage(Stage):
         if self.func is None:
             raise ValueError("FunctionStage requires a function")
 
-    def execute(self, context: Dict[str, Any]) -> Any:
+    def execute(self, context: dict[str, Any]) -> Any:
         """Execute the wrapped function."""
         if not self.validate_inputs(context):
             raise ValueError(f"Invalid inputs for stage '{self.name}'")
@@ -66,12 +67,12 @@ class TransformStage(Stage):
 
     input_key: str
     output_key: str
-    transform_func: Optional[Callable] = Field(default=None, exclude=True)
+    transform_func: Callable | None = Field(default=None, exclude=True)
 
     class Config:
         arbitrary_types_allowed = True
 
-    def execute(self, context: Dict[str, Any]) -> Any:
+    def execute(self, context: dict[str, Any]) -> Any:
         """Apply transformation to data from context."""
         if self.input_key not in context:
             raise KeyError(f"Required input '{self.input_key}' not found in context")
@@ -93,10 +94,10 @@ class DataLoaderStage(Stage):
     """Stage for loading data from various sources."""
 
     source_type: str  # 'csv', 'parquet', 'json', etc.
-    source_path: Optional[str] = None
+    source_path: str | None = None
     output_key: str = "data"
 
-    def execute(self, context: Dict[str, Any]) -> Any:
+    def execute(self, context: dict[str, Any]) -> Any:
         """Load data from source."""
         import pandas as pd
 
@@ -122,12 +123,12 @@ class ModelStage(Stage):
     """Stage for model training or prediction."""
 
     model_type: str  # 'train' or 'predict'
-    model_class: Optional[str] = None
+    model_class: str | None = None
     input_features: str = "features"
-    input_target: Optional[str] = "target"
+    input_target: str | None = "target"
     output_key: str = "model"
 
-    def execute(self, context: Dict[str, Any]) -> Any:
+    def execute(self, context: dict[str, Any]) -> Any:
         """Train or apply a model."""
         if self.model_type == "train":
             return self._train_model(context)
@@ -136,7 +137,7 @@ class ModelStage(Stage):
         else:
             raise ValueError(f"Unknown model_type: {self.model_type}")
 
-    def _train_model(self, context: Dict[str, Any]) -> Any:
+    def _train_model(self, context: dict[str, Any]) -> Any:
         """Train a model with data from context."""
         from sklearn.ensemble import RandomForestClassifier
         from sklearn.linear_model import LogisticRegression
@@ -145,7 +146,8 @@ class ModelStage(Stage):
         y = context.get(self.input_target)
 
         if X is None or y is None:
-            raise ValueError(f"Training requires both {self.input_features} and {self.input_target}")
+            msg = f"Training requires both {self.input_features} and {self.input_target}"
+            raise ValueError(msg)
 
         if self.model_class == "LogisticRegression":
             model = LogisticRegression(random_state=42)
@@ -157,7 +159,7 @@ class ModelStage(Stage):
         model.fit(X, y)
         return {self.output_key: model}
 
-    def _predict(self, context: Dict[str, Any]) -> Any:
+    def _predict(self, context: dict[str, Any]) -> Any:
         """Make predictions with a trained model."""
         model = context.get("model")
         X = context.get(self.input_features)

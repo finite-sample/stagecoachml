@@ -143,11 +143,11 @@ python examples/iris_classification/iris_pipeline.py
 ```
 Complete classification workflow with multiple models, feature importance, and sample predictions.
 
-### 🏠 Boston Housing Regression  
+### 🏠 California Housing Regression  
 ```bash
 python examples/boston_housing/housing_pipeline.py
 ```
-Regression pipeline comparing Linear, Ridge, Random Forest, and Gradient Boosting models.
+Regression pipeline comparing Linear, Ridge, Random Forest, and Gradient Boosting models on California housing dataset.
 
 ### 🔢 Handwritten Digits Recognition
 ```bash
@@ -167,19 +167,17 @@ Advanced example showing how to create custom stages with validation, retry logi
 from stagecoachml import Pipeline
 from stagecoachml.stage import FunctionStage
 import numpy as np
-from sklearn.datasets import load_boston
+from sklearn.datasets import fetch_california_housing
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 # Create pipeline
 pipeline = Pipeline(name="housing_regression")
 
-# Stage 1: Load Boston housing data
+# Stage 1: Load California housing data
 def load_housing_data(context):
-    import warnings
-    warnings.filterwarnings("ignore", category=FutureWarning)
-    boston = load_boston()
-    return {"X": boston.data, "y": boston.target}
+    california = fetch_california_housing()
+    return {"X": california.data, "y": california.target}
 
 # Stage 2: Split data
 def split_data(context):
@@ -316,7 +314,7 @@ class CustomProcessingStage(Stage):
 
 ```bash
 # Clone the repository
-git clone https://github.com/soodoku/stagecoachml.git
+git clone https://github.com/finite-sample/stagecoachml.git
 cd stagecoachml
 
 # Install with development dependencies using uv
@@ -351,9 +349,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-- 📚 [Documentation](https://soodoku.github.io/stagecoachml/)
-- 🐛 [Issue Tracker](https://github.com/soodoku/stagecoachml/issues)
-- 💬 [Discussions](https://github.com/soodoku/stagecoachml/discussions)
+- 📚 [Documentation](https://finite-sample.github.io/stagecoachml/)
+- 🐛 [Issue Tracker](https://github.com/finite-sample/stagecoachml/issues)
+- 💬 [Discussions](https://github.com/finite-sample/stagecoachml/discussions)
 
 ## Acknowledgments
 
@@ -372,6 +370,6 @@ If you use StagecoachML in your research, please cite:
   author = {Sood, Gaurav},
   title = {StagecoachML: Machine Learning Pipeline Orchestration Framework},
   year = {2024},
-  url = {https://github.com/soodoku/stagecoachml}
+  url = {https://github.com/finite-sample/stagecoachml}
 }
 ```

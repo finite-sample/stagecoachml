@@ -100,9 +100,7 @@ class TestEndToEndPipeline:
         assert results["evaluate"]["accuracy"] <= 1.0
 
         assert "predictions" in results["evaluate"]
-        assert len(results["evaluate"]["predictions"]) == len(
-            results["split_data"]["X_test"]
-        )
+        assert len(results["evaluate"]["predictions"]) == len(results["split_data"]["X_test"])
 
     def test_data_transformation_pipeline(self):
         """Test a data transformation pipeline."""
@@ -110,11 +108,13 @@ class TestEndToEndPipeline:
 
         # Stage 1: Generate data
         def generate_data(context):
-            df = pd.DataFrame({
-                "A": np.random.randn(100),
-                "B": np.random.randn(100),
-                "C": np.random.randn(100),
-            })
+            df = pd.DataFrame(
+                {
+                    "A": np.random.randn(100),
+                    "B": np.random.randn(100),
+                    "C": np.random.randn(100),
+                }
+            )
             return {"raw_data": df}
 
         gen_stage = FunctionStage(name="generate", func=generate_data)
@@ -182,7 +182,7 @@ class TestEndToEndPipeline:
         # Parallel stage 2
         def process_b(context):
             data = context["init"]["data"]
-            return {"result_b": [x ** 2 for x in data]}
+            return {"result_b": [x**2 for x in data]}
 
         stage_b = FunctionStage(name="process_b", func=process_b)
         pipeline.add_stage(stage_b)
@@ -206,10 +206,8 @@ class TestEndToEndPipeline:
         assert len(results) == 4
         assert results["init"]["data"] == list(range(10))
         assert results["process_a"]["result_a"] == [x * 2 for x in range(10)]
-        assert results["process_b"]["result_b"] == [x ** 2 for x in range(10)]
-        assert results["merge"]["merged"] == [
-            2 * i + i ** 2 for i in range(10)
-        ]
+        assert results["process_b"]["result_b"] == [x**2 for x in range(10)]
+        assert results["merge"]["merged"] == [2 * i + i**2 for i in range(10)]
 
     def test_error_handling_pipeline(self):
         """Test pipeline error handling."""
@@ -241,8 +239,9 @@ class TestEndToEndPipeline:
 
         # Create 50 stages
         for i in range(50):
+
             def stage_func(context, stage_num=i):
-                prev_sum = context.get(f"stage_{stage_num-1}", {}).get("sum", 0)
+                prev_sum = context.get(f"stage_{stage_num - 1}", {}).get("sum", 0)
                 return {"sum": prev_sum + stage_num}
 
             stage = FunctionStage(
@@ -252,7 +251,7 @@ class TestEndToEndPipeline:
             pipeline.add_stage(stage)
 
             if i > 0:
-                pipeline.add_dependency(f"stage_{i-1}", f"stage_{i}")
+                pipeline.add_dependency(f"stage_{i - 1}", f"stage_{i}")
 
         # Run pipeline
         results = pipeline.run()
@@ -268,6 +267,7 @@ class TestEndToEndPipeline:
         # Initial stage
         def init_stage(context):
             import random
+
             return {"value": random.choice([0, 1])}
 
         init = FunctionStage(name="init", func=init_stage)

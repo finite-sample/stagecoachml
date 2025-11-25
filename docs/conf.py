@@ -72,9 +72,13 @@ html_theme_options = {
 html_favicon = "_static/favicon.ico" if os.path.exists("_static/favicon.ico") else None
 
 # Custom CSS
-html_css_files = [
-    "custom.css",
-] if os.path.exists("_static/custom.css") else []
+html_css_files = (
+    [
+        "custom.css",
+    ]
+    if os.path.exists("_static/custom.css")
+    else []
+)
 
 # Autodoc configuration
 autodoc_default_options = {

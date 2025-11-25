@@ -54,6 +54,7 @@ class TestFunctionStage:
 
     def test_function_stage_execution(self):
         """Test FunctionStage executes the wrapped function."""
+
         def test_func(context):
             return {"value": context.get("input", 0) * 2}
 
@@ -63,6 +64,7 @@ class TestFunctionStage:
 
     def test_function_stage_with_validation(self):
         """Test FunctionStage with custom validation."""
+
         def test_func(context):
             return {"value": 42}
 
@@ -74,6 +76,7 @@ class TestFunctionStage:
 
     def test_function_stage_output_validation(self):
         """Test FunctionStage output validation."""
+
         def test_func(context):
             return None
 
@@ -99,6 +102,7 @@ class TestTransformStage:
 
     def test_transform_stage_with_function(self):
         """Test TransformStage with custom transformation."""
+
         def transform(data):
             return [x * 2 for x in data]
 
@@ -236,10 +240,12 @@ class TestModelStage:
             model_type="predict",
         )
         X_test = np.array([[2, 3], [4, 5]])
-        predict_result = predict_stage.execute({
-            "model": train_result["model"],
-            "features": X_test,
-        })
+        predict_result = predict_stage.execute(
+            {
+                "model": train_result["model"],
+                "features": X_test,
+            }
+        )
 
         assert "predictions" in predict_result
         assert len(predict_result["predictions"]) == 2
