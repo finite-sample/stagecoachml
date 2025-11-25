@@ -1,1 +1,1 @@
-"""Tests for StagecoachML."""
+"""StagecoachML test suite."""

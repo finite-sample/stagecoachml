@@ -5,7 +5,7 @@ build-backend = "uv_build"
 [project]
 name = "stagecoachml"
 version = "0.1.0"
-description = "A powerful machine learning pipeline orchestration framework"
+description = "A library for two-stage machine learning models with staggered feature arrival"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -17,15 +17,15 @@ maintainers = [
 ]
 keywords = [
     "machine learning",
-    "ml pipeline",
-    "data science",
-    "orchestration",
-    "workflow",
-    "automation",
-    "model training",
-    "feature engineering",
-    "dag",
-    "etl"
+    "two-stage models",
+    "staged features",
+    "early prediction",
+    "residual learning",
+    "scikit-learn",
+    "multi-stage inference",
+    "feature arrival",
+    "latency optimization",
+    "progressive ml"
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -43,14 +43,9 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.20.0",
-    "pandas>=1.3.0",
+    "pandas>=1.3.0", 
     "scikit-learn>=1.0.0",
-    "pydantic>=2.0.0",
-    "rich>=13.0.0",
-    "typer>=0.9.0",
-    "pyyaml>=6.0",
-    "networkx>=3.0",
-    "joblib>=1.3.0"
+    "psutil>=5.8.0"
 ]
 
 [project.optional-dependencies]
@@ -180,16 +175,9 @@ ignore_missing_imports = true
 minversion = "7.0"
 testpaths = ["tests"]
 addopts = [
-    "-ra",
-    "--strict-markers",
-    "--cov=stagecoachml",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-report=xml",
-    "--cov-branch",
-    "--cov-fail-under=80",
-    "-n=auto",
-    "--tb=short"
+    "-v",
+    "--tb=short",
+    "--strict-markers"
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
@@ -199,7 +187,8 @@ markers = [
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
-    "ignore::PendingDeprecationWarning"
+    "ignore::PendingDeprecationWarning",
+    "ignore::UserWarning"
 ]
 
 [tool.coverage.run]

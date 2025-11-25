@@ -68,9 +68,16 @@ Under the hood, you still train and cross-validate it like any other sklearn est
 StagecoachML is a pure Python package that depends on NumPy, pandas, and scikit-learn.
 
 ```bash
-pip install numpy pandas scikit-learn
-# then add stagecoachml/ to your repo or install from your own index
-````
+pip install stagecoachml
+```
+
+Or install from source:
+
+```bash
+git clone https://github.com/finite-sample/stagecoachml.git
+cd stagecoachml
+pip install -e .
+```
 
 Import the estimators:
 

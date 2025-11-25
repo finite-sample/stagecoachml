@@ -1,0 +1,28 @@
+# Ruff configuration for StagecoachML
+target-version = "py311"
+line-length = 100
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "C4",   # flake8-comprehensions
+    "PT",   # flake8-pytest-style
+]
+
+ignore = [
+    "E501",  # Line too long (handled by formatter)
+    "N803",  # Argument name should be lowercase (ML convention allows X)
+    "N806",  # Variable in function should be lowercase (ML convention allows X_early, X_late)
+    "F841",  # Local variable is assigned to but never used (sometimes needed for unpacking)
+    "B017",  # pytest.raises without match (sometimes necessary for broad exceptions)
+    "PT011", # pytest.raises(Exception) is too broad (sometimes necessary)
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["PT011", "B017"]  # Allow broad exceptions in tests
+"stagecoachml/*" = ["N803", "N806"]  # Allow ML naming conventions
