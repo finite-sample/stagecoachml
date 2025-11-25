@@ -5,371 +5,317 @@
 [![Documentation](https://github.com/finite-sample/stagecoachml/actions/workflows/docs.yml/badge.svg)](https://finite-sample.github.io/stagecoachml/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A powerful and intuitive machine learning pipeline orchestration framework that makes building, managing, and deploying ML workflows as easy as riding a stagecoach.
+**StagecoachML** is a tiny library for building two-stage models when your features arrive in two batches at different times.
 
-## Features
+Think:
 
-✨ **Simple & Intuitive** - Build complex ML pipelines with a clean, Pythonic API
+- Ad serving and recommendation:  
+  first score on **user + context**, then refine on **creative/item + real-time signals**.
+- Per-customer privacy:  
+  a shared **non-sensitive trunk**, plus a **per-customer head** that uses private fields inside their own environment.
+- Latency-sensitive inference:  
+  run a fast **stage-1** model early in the request, and only run the heavier **stage-2** model when needed.
 
-🚀 **Fast & Efficient** - Optimized DAG execution with intelligent caching
+StagecoachML encodes that pattern directly in the model interface instead of leaving it buried in infra and notebooks.
 
-🔧 **Flexible** - Support for various data sources, transformations, and models
+---
 
-📊 **Comprehensive** - Built-in stages for common ML tasks
+## When should you use StagecoachML?
 
-🎯 **Type-Safe** - Full type hints and runtime validation with Pydantic
+Use StagecoachML when:
 
-🛠️ **Extensible** - Easy to create custom stages and integrate with any ML framework
+- You **can’t wait** for all features before you have to start making decisions.
+- Some features live in a different **silo** (e.g. customer’s infra) and must never
+  hit the central model.
+- You want to **tune and evaluate** the whole two-stage system as a *single* estimator
+  (train/test/CV), while still being able to:
+  - get stage-1 scores from early features, and  
+  - get refined scores once late features arrive.
+
+If you have all your features at once and a single model is fine, this library is
+probably overkill. But if you live with staggered features, StagecoachML keeps the
+logic honest.
+
+---
+
+## Core idea
+
+A StagecoachML model splits features into two groups:
+
+- **Early features**: available at stage 1 (e.g. user, context).
+- **Late features**: only available at stage 2 (e.g. ad/creative/item, customer-side data).
+
+You choose:
+
+- a **stage-1 estimator** that sees only early features, and
+- a **stage-2 estimator** that sees late features plus (optionally) the stage-1
+  prediction, and either:
+  - learns to predict the **residual** `y − ŷ₁`, or
+  - learns the final target directly.
+
+At inference time you can:
+
+- call `predict_stage1(...)` / `predict_stage1_proba(...)` when you only have
+  early features; and
+- call `predict(...)` / `predict_proba(...)` later when you have both.
+
+Under the hood, you still train and cross-validate it like any other sklearn estimator.
+
+---
 
 ## Installation
 
+StagecoachML is a pure Python package that depends on NumPy, pandas, and scikit-learn.
+
 ```bash
-# Using pip
-pip install stagecoachml
+pip install numpy pandas scikit-learn
+# then add stagecoachml/ to your repo or install from your own index
+````
 
-# Using uv (recommended)
-uv pip install stagecoachml
-
-# With visualization support
-pip install stagecoachml[viz]
-
-# For development
-pip install stagecoachml[dev]
-```
-
-## Quick Start
+Import the estimators:
 
 ```python
-from stagecoachml import Pipeline
-from stagecoachml.stage import FunctionStage
-from sklearn.datasets import load_iris
+from stagecoachml import StagecoachRegressor, StagecoachClassifier
+```
+
+---
+
+## Quick start
+
+### Regression example (diabetes dataset)
+
+```python
+from stagecoachml import StagecoachRegressor
+from sklearn.datasets import load_diabetes
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.metrics import r2_score
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+
+# Load data as a DataFrame
+diabetes = load_diabetes(as_frame=True)
+X = diabetes.frame.drop(columns=["target"])
+y = diabetes.frame["target"]
+
+# Split columns into "early" and "late" features
+features = list(X.columns)
+mid = len(features) // 2
+early_features = features[:mid]   # pretend these arrive early
+late_features  = features[mid:]   # pretend these arrive later
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=0
+)
+
+# Stage-1: fast global model on early features
+stage1 = LinearRegression()
+
+# Stage-2: more flexible model on late features + stage-1 prediction
+stage2 = RandomForestRegressor(n_estimators=200, random_state=0)
+
+model = StagecoachRegressor(
+    stage1_estimator=stage1,
+    stage2_estimator=stage2,
+    early_features=early_features,
+    late_features=late_features,
+    residual=True,
+    use_stage1_pred_as_feature=True,
+    inner_cv=None,            # set >1 to cross-fit stage-1 preds if you care
+)
+
+# Hyper-parameter search over both stages
+param_grid = {
+    "stage1_estimator__fit_intercept": [True, False],
+    "stage2_estimator__max_depth": [None, 5, 10],
+}
+grid = GridSearchCV(model, param_grid, cv=5)
+grid.fit(X_train, y_train)
+
+best = grid.best_estimator_
+
+print("Stage-1 test R²: ", r2_score(y_test, best.predict_stage1(X_test)))
+print("Final   test R²: ", r2_score(y_test, best.predict(X_test)))
+```
+
+### Classification example (breast cancer dataset)
+
+```python
+from stagecoachml import StagecoachClassifier
+from sklearn.datasets import load_breast_cancer
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, f1_score
+from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score
 
-# Create a pipeline
-pipeline = Pipeline(name="iris_classifier")
+data = load_breast_cancer(as_frame=True)
+X = data.data
+y = data.target
 
-# Stage 1: Load iris dataset
-def load_iris_data(context):
-    iris = load_iris()
-    return {"X": iris.data, "y": iris.target}
+features = list(X.columns)
+mid = len(features) // 2
+early = features[:mid]
+late  = features[mid:]
 
-# Stage 2: Split data
-def split_data(context):
-    X, y = context["load_data"]["X"], context["load_data"]["y"]
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
-    return {"X_train": X_train, "X_test": X_test, "y_train": y_train, "y_test": y_test}
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=1, stratify=y
+)
 
-# Stage 3: Train model
-def train_model(context):
-    X_train = context["split_data"]["X_train"]
-    y_train = context["split_data"]["y_train"]
-    model = RandomForestClassifier(random_state=42)
-    model.fit(X_train, y_train)
-    return {"model": model}
+stage1_clf = LogisticRegression(max_iter=1000)
+stage2_clf = RandomForestClassifier(n_estimators=200, random_state=2)
 
-# Stage 4: Evaluate model
-def evaluate_model(context):
-    model = context["train_model"]["model"]
-    X_test = context["split_data"]["X_test"]
-    y_test = context["split_data"]["y_test"]
-    predictions = model.predict(X_test)
-    accuracy = accuracy_score(y_test, predictions)
-    return {"accuracy": accuracy, "predictions": predictions}
+model = StagecoachClassifier(
+    stage1_estimator=stage1_clf,
+    stage2_estimator=stage2_clf,
+    early_features=early,
+    late_features=late,
+    use_stage1_pred_as_feature=True,
+)
 
-# Add stages to pipeline
-pipeline.add_stage(FunctionStage(name="load_data", func=load_iris_data))
-pipeline.add_stage(FunctionStage(name="split_data", func=split_data))
-pipeline.add_stage(FunctionStage(name="train_model", func=train_model))
-pipeline.add_stage(FunctionStage(name="evaluate", func=evaluate_model))
+model.fit(X_train, y_train)
 
-# Define dependencies
-pipeline.add_dependency("load_data", "split_data")
-pipeline.add_dependency("split_data", "train_model")
-pipeline.add_dependency("train_model", "evaluate")
+def metrics(y_true, y_pred):
+    return accuracy_score(y_true, y_pred), f1_score(y_true, y_pred)
 
-# Run the pipeline
-results = pipeline.run()
-print(f"Model accuracy: {results['evaluate']['accuracy']:.4f}")
+# Provisional scores from early features only
+stage1_test_proba = model.predict_stage1_proba(X_test)
+stage1_acc, stage1_f1 = metrics(y_test, (stage1_test_proba >= 0.5).astype(int))
+
+# Final scores with all features
+final_acc, final_f1 = metrics(y_test, model.predict(X_test))
+
+print("Stage-1  test accuracy/F1:", f"{stage1_acc:.3f}/{stage1_f1:.3f}")
+print("Final    test accuracy/F1:", f"{final_acc:.3f}/{final_f1:.3f}")
 ```
 
-## Core Concepts
+---
 
-### Pipelines
+## API overview
 
-Pipelines are directed acyclic graphs (DAGs) of stages that define your ML workflow:
-
-```python
-from stagecoachml import Pipeline
-
-pipeline = Pipeline(name="my_ml_workflow")
-```
-
-### Stages
-
-Stages are the building blocks of pipelines. Use built-in stages or create custom ones:
+### `StagecoachRegressor`
 
 ```python
-from stagecoachml.stage import FunctionStage
-
-def preprocess_data(context):
-    df = context["raw_data"]
-    # Perform preprocessing
-    return {"processed_data": df}
-
-stage = FunctionStage(
-    name="preprocess",
-    func=preprocess_data
+StagecoachRegressor(
+    stage1_estimator,
+    stage2_estimator,
+    early_features,
+    late_features,
+    residual=True,
+    use_stage1_pred_as_feature=True,
+    inner_cv=None,
+    random_state=None,
 )
 ```
 
-### Dependencies
+Key points:
 
-Define execution order by specifying dependencies between stages:
+* `stage1_estimator`: any sklearn regressor (`RandomForestRegressor`, `LinearRegression`, etc.).
+* `stage2_estimator`: another regressor for the late features (often more flexible).
+* `early_features` / `late_features`: column names defining feature arrival.
+* `residual=True`: stage 2 learns `y − ŷ₁` and we add it back at prediction time.
+* `use_stage1_pred_as_feature=True`: stage-1 prediction becomes an extra input to stage 2.
+* `inner_cv`: optional K-fold cross-fitting to generate out-of-fold stage-1 predictions for stage-2 training.
 
-```python
-pipeline.add_dependency("load_data", "preprocess")
-pipeline.add_dependency("preprocess", "train_model")
-```
+Methods:
 
-## Real Examples
+* `fit(X, y)`
+* `predict_stage1(X)` – early-only predictions.
+* `predict(X)` – final predictions.
 
-StagecoachML comes with comprehensive examples using real datasets:
-
-### 🌸 Iris Classification
-```bash
-python examples/iris_classification/iris_pipeline.py
-```
-Complete classification workflow with multiple models, feature importance, and sample predictions.
-
-### 🏠 California Housing Regression  
-```bash
-python examples/boston_housing/housing_pipeline.py
-```
-Regression pipeline comparing Linear, Ridge, Random Forest, and Gradient Boosting models on California housing dataset.
-
-### 🔢 Handwritten Digits Recognition
-```bash
-python examples/digits_recognition/digits_pipeline.py
-```
-Computer vision pipeline with SVM, Logistic Regression, and Random Forest on 8×8 pixel images.
-
-### 🔧 Custom Stages
-```bash
-python examples/custom_stages/custom_pipeline.py
-```
-Advanced example showing how to create custom stages with validation, retry logic, and configuration.
-
-## Advanced Example
+### `StagecoachClassifier`
 
 ```python
-from stagecoachml import Pipeline
-from stagecoachml.stage import FunctionStage
-import numpy as np
-from sklearn.datasets import fetch_california_housing
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-
-# Create pipeline
-pipeline = Pipeline(name="housing_regression")
-
-# Stage 1: Load California housing data
-def load_housing_data(context):
-    california = fetch_california_housing()
-    return {"X": california.data, "y": california.target}
-
-# Stage 2: Split data
-def split_data(context):
-    X, y = context["load_data"]["X"], context["load_data"]["y"]
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
-    return {
-        "X_train": X_train, "X_test": X_test, 
-        "y_train": y_train, "y_test": y_test
-    }
-
-pipeline.add_stage(FunctionStage(name="load_data", func=load_housing_data))
-pipeline.add_stage(FunctionStage(name="split", func=split_data))
-
-# Stage 3: Scale features  
-def scale_features(context):
-    scaler = StandardScaler()
-    X_train = scaler.fit_transform(context["split"]["X_train"])
-    X_test = scaler.transform(context["split"]["X_test"])
-    return {"X_train_scaled": X_train, "X_test_scaled": X_test, "scaler": scaler}
-
-# Stage 4: Train model
-def train_model(context):
-    from sklearn.ensemble import RandomForestRegressor
-    model = RandomForestRegressor(n_estimators=100, random_state=42)
-    model.fit(context["scale"]["X_train_scaled"], context["split"]["y_train"])
-    return {"model": model}
-
-# Stage 5: Evaluate
-def evaluate(context):
-    from sklearn.metrics import mean_squared_error, r2_score
-    model = context["train"]["model"]
-    X_test, y_test = context["scale"]["X_test_scaled"], context["split"]["y_test"]
-    predictions = model.predict(X_test)
-    rmse = np.sqrt(mean_squared_error(y_test, predictions))
-    r2 = r2_score(y_test, predictions)
-    return {"rmse": rmse, "r2": r2, "predictions": predictions}
-
-# Build pipeline
-for stage in [
-    FunctionStage(name="scale", func=scale_features),
-    FunctionStage(name="train", func=train_model),
-    FunctionStage(name="evaluate", func=evaluate)
-]:
-    pipeline.add_stage(stage)
-
-# Define dependencies
-for dep in [("load_data", "split"), ("split", "scale"), ("scale", "train"), ("train", "evaluate")]:
-    pipeline.add_dependency(dep[0], dep[1])
-
-# Run pipeline
-results = pipeline.run()
-print(f"Model RMSE: ${results['evaluate']['rmse']:.2f}k")
-print(f"R² Score: {results['evaluate']['r2']:.4f}")
+StagecoachClassifier(
+    stage1_estimator,
+    stage2_estimator,
+    early_features,
+    late_features,
+    use_stage1_pred_as_feature=True,
+    inner_cv=None,
+    random_state=None,
+)
 ```
 
-## CLI Usage
+* Stage-1 classifier must implement `predict_proba` or `decision_function`.
+* Stage-2 classifier must implement `predict_proba`.
+* `predict_stage1_proba(X)` returns a provisional probability for the positive class
+  using early features only.
+* `predict_proba(X)` / `predict(X)` use both stages.
 
-StagecoachML comes with a powerful CLI for managing pipelines:
+---
+
+## Business-level use cases
+
+### 1. Ad serving & recommendation
+
+* **Stage 1 (trunk):**
+  user, session, page/context features. Run for every candidate to
+  do rough scoring / candidate pruning.
+* **Stage 2 (head):**
+  ad/creative/item-side features (embeddings, textual features, sponsorship info),
+  plus stage-1 scores. Run only on the smaller candidate set.
+
+This lets you:
+
+* keep the expensive features and models off the critical path where possible,
+* cross-validate the *whole* two-stage scoring process as one estimator, and
+* reason explicitly about which features are actually available at each stage.
+
+### 2. Per-customer models with private fields
+
+* **Shared trunk:** trained on non-sensitive features across all customers.
+* **Per-customer head (stage 2):** trained only on that customer’s private fields
+  (GDP data, custom risk scores, internal labels) inside their environment.
+
+You can:
+
+* ship the trunk once,
+* let each customer fit their own stage-2 model locally,
+* still evaluate how “global trunk + local head” behaves on held-out data.
+
+### 3. Latency and staged inference
+
+If your system has a front-door budget (say ~10 ms) and a back-end budget per
+selected candidate, StagecoachML gives you a clean way to:
+
+* do rough scoring at T₁ using a small, cheap stage-1 model;
+* hydrate more features or call heavier services; and
+* refine scores at T₂ with stage-2.
+
+Because the whole pipeline is an sklearn estimator, you don’t have to guess whether
+this staging actually helps: you can compare two-stage vs single-stage models on
+the same train/test splits.
+
+---
+
+## Examples
+
+The `examples/` directory contains runnable scripts:
+
+* `examples/regression_example.py`
+  Uses the diabetes dataset, splits features into early/late, trains a
+  `StagecoachRegressor`, and compares it to a one-stage baseline.
+
+* `examples/classification_example.py`
+  Uses the breast cancer dataset, trains a `StagecoachClassifier`, and compares
+  provisional vs final predictions and a one-stage logistic baseline.
+
+Run them with:
 
 ```bash
-# Show version
-stagecoach version
-
-# Run a pipeline from YAML config
-stagecoach run pipeline.yaml
-
-# Validate pipeline configuration
-stagecoach validate pipeline.yaml
-
-# List stages in a pipeline
-stagecoach list-stages pipeline.yaml
-
-# Dry run to see execution plan
-stagecoach run pipeline.yaml --dry-run
+python -m examples.regression_example
+python -m examples.classification_example
 ```
 
-## Configuration Files
+---
 
-Define pipelines in YAML for reusability:
+## Design notes & non-goals
 
-```yaml
-pipeline:
-  name: iris_classifier
-  description: Classify iris species
+* Treat `Stagecoach*` as **one model** for train/validation/test; don’t hand-tune
+  stages in isolation and then try to glue them.
+* `inner_cv` is an optional extra for robustness, not a replacement for normal
+  cross-validation.
+* This library is *not* a general DAG/workflow engine. If you want full pipeline
+  orchestration (scheduling, retries, monitoring, etc.), you probably want
+  Airflow/Prefect/etc. StagecoachML is about one very specific modelling pattern:
+  staged feature arrival.
 
-stages:
-  - name: load_data
-    type: data_loader
-    source_type: csv
-    source_path: iris.csv
-    
-  - name: preprocess
-    type: transform
-    input_key: data
-    output_key: features
-    
-  - name: train_model
-    type: model
-    model_type: train
-    model_class: RandomForest
-    
-dependencies:
-  - [load_data, preprocess]
-  - [preprocess, train_model]
-```
-
-## Built-in Stages
-
-- **DataLoaderStage** - Load data from CSV, Parquet, JSON
-- **TransformStage** - Apply transformations to data
-- **ModelStage** - Train and evaluate ML models
-- **FunctionStage** - Wrap any Python function as a stage
-
-## Creating Custom Stages
-
-```python
-from stagecoachml.stage import Stage
-
-class CustomProcessingStage(Stage):
-    def execute(self, context):
-        # Your custom logic here
-        data = context.get("input_data")
-        processed = self.custom_process(data)
-        return {"output": processed}
-    
-    def custom_process(self, data):
-        # Implementation
-        return data
-```
-
-## Development
-
-```bash
-# Clone the repository
-git clone https://github.com/finite-sample/stagecoachml.git
-cd stagecoachml
-
-# Install with development dependencies using uv
-uv pip install -e ".[dev]"
-
-# Run tests
-pytest
-
-# Run linting
-ruff check .
-
-# Format code
-ruff format .
-
-# Run type checking
-mypy src/stagecoachml
-```
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-- 📚 [Documentation](https://finite-sample.github.io/stagecoachml/)
-- 🐛 [Issue Tracker](https://github.com/finite-sample/stagecoachml/issues)
-- 💬 [Discussions](https://github.com/finite-sample/stagecoachml/discussions)
-
-## Acknowledgments
-
-Built with ❤️ using:
-- [Pydantic](https://pydantic-docs.helpmanual.io/) for data validation
-- [NetworkX](https://networkx.org/) for graph operations
-- [Rich](https://rich.readthedocs.io/) for beautiful terminal output
-- [Typer](https://typer.tiangolo.com/) for the CLI
-
-## Citation
-
-If you use StagecoachML in your research, please cite:
-
-```bibtex
-@software{stagecoachml,
-  author = {Sood, Gaurav},
-  title = {StagecoachML: Machine Learning Pipeline Orchestration Framework},
-  year = {2024},
-  url = {https://github.com/finite-sample/stagecoachml}
-}
-```
