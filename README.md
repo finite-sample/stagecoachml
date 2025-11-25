@@ -1,10 +1,8 @@
 # StagecoachML
 
 [![PyPI - Version](https://img.shields.io/pypi/v/stagecoachml.svg)](https://pypi.org/project/stagecoachml)
-[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/stagecoachml.svg)](https://pypi.org/project/stagecoachml)
 [![Tests](https://github.com/finite-sample/stagecoachml/actions/workflows/ci.yml/badge.svg)](https://github.com/finite-sample/stagecoachml/actions/workflows/ci.yml)
 [![Documentation](https://github.com/finite-sample/stagecoachml/actions/workflows/docs.yml/badge.svg)](https://finite-sample.github.io/stagecoachml/)
-[![codecov](https://codecov.io/gh/finite-sample/stagecoachml/branch/main/graph/badge.svg)](https://codecov.io/gh/finite-sample/stagecoachml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A powerful and intuitive machine learning pipeline orchestration framework that makes building, managing, and deploying ML workflows as easy as riding a stagecoach.
