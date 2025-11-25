@@ -1,6 +1,6 @@
 """Unit tests for stage module."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -69,9 +69,11 @@ class TestFunctionStage:
             return {"value": 42}
 
         stage = FunctionStage(name="test", func=test_func)
-        stage.validate_inputs = MagicMock(return_value=False)
 
-        with pytest.raises(ValueError, match="Invalid inputs"):
+        with (
+            patch.object(FunctionStage, "validate_inputs", return_value=False),
+            pytest.raises(ValueError, match="Invalid inputs"),
+        ):
             stage.execute({})
 
     def test_function_stage_output_validation(self):
@@ -81,9 +83,11 @@ class TestFunctionStage:
             return None
 
         stage = FunctionStage(name="test", func=test_func)
-        stage.validate_outputs = MagicMock(return_value=False)
 
-        with pytest.raises(ValueError, match="Invalid outputs"):
+        with (
+            patch.object(FunctionStage, "validate_outputs", return_value=False),
+            pytest.raises(ValueError, match="Invalid outputs"),
+        ):
             stage.execute({})
 
 
