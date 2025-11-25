@@ -25,10 +25,10 @@ jobs:
           uv pip install --system ruff
           
       - name: Run ruff check
-        run: ruff check src/ tests/ docs/
+        run: ruff check stagecoachml/ tests/ docs/
         
       - name: Run ruff format check
-        run: ruff format --check src/ tests/ docs/
+        run: ruff format --check stagecoachml/ tests/ docs/
 
   test:
     runs-on: ${{ matrix.os }}

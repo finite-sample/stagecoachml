@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.9.11,<0.10.0"]
+build-backend = "uv_build"
 
 [project]
 name = "stagecoachml"
@@ -97,23 +97,14 @@ Changelog = "https://github.com/finite-sample/stagecoachml/blob/main/CHANGELOG.m
 [project.scripts]
 stagecoach = "stagecoachml.cli:app"
 
-[tool.hatch.build.targets.sdist]
-include = [
-    "/src",
-    "/tests",
-    "/docs",
-    "README.md",
-    "LICENSE",
-    "pyproject.toml"
-]
+[tool.uv.build-backend]
+module-root = ""
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/stagecoachml"]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-src = ["src", "tests"]
+src = ["stagecoachml", "tests"]
 extend-include = ["*.ipynb"]
 extend-exclude = ["examples/**"]
 
@@ -155,9 +146,9 @@ ignore = [
 "__init__.py" = ["F401", "D104"]
 "tests/*" = ["D", "S101", "ARG001", "ARG002", "ARG005", "N806", "PLC0415", "PT006", "SIM113", "UP035"]
 "docs/*" = ["D", "PTH100", "PTH110"]
-"src/stagecoachml/cli.py" = ["B008", "ARG001", "PTH123", "B904"]
-"src/stagecoachml/stage.py" = ["PLC0415", "N806", "ARG002", "D106", "D401", "TC003"]
-"src/stagecoachml/pipeline.py" = ["TC001", "D106", "B904"]
+"stagecoachml/cli.py" = ["B008", "ARG001", "PTH123", "B904"]
+"stagecoachml/stage.py" = ["PLC0415", "N806", "ARG002", "D106", "D401", "TC003"]
+"stagecoachml/pipeline.py" = ["TC001", "D106", "B904"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["stagecoachml"]
@@ -213,7 +204,7 @@ filterwarnings = [
 
 [tool.coverage.run]
 branch = true
-source = ["src/stagecoachml"]
+source = ["stagecoachml"]
 omit = [
     "*/tests/*",
     "*/__init__.py",
