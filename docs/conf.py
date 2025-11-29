@@ -57,7 +57,7 @@ master_doc = "index"
 # HTML output options
 html_theme = "furo"
 html_title = "StagecoachML"
-html_static_path = []
+html_static_path = ["_static"]
 
 # Theme options
 html_theme_options = {
