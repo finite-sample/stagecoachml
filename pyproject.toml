@@ -89,8 +89,6 @@ Repository = "https://github.com/finite-sample/stagecoachml"
 "Bug Tracker" = "https://github.com/finite-sample/stagecoachml/issues"
 Changelog = "https://github.com/finite-sample/stagecoachml/blob/main/CHANGELOG.md"
 
-[project.scripts]
-stagecoach = "stagecoachml.cli:app"
 
 [tool.uv.build-backend]
 module-root = ""

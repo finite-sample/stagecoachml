@@ -4,12 +4,13 @@ This example demonstrates basic StagecoachClassifier usage with probability
 estimation and performance comparison.
 """
 
-from stagecoachml import StagecoachClassifier
 from sklearn.datasets import load_breast_cancer
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, f1_score
-from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, f1_score
+from sklearn.model_selection import train_test_split
+
+from stagecoachml import StagecoachClassifier
 
 data = load_breast_cancer(as_frame=True)
 X = data.data

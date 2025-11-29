@@ -4,12 +4,13 @@ This example demonstrates basic StagecoachRegressor usage with feature splitting
 hyperparameter tuning, and performance comparison.
 """
 
-from stagecoachml import StagecoachRegressor
 from sklearn.datasets import load_diabetes
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.metrics import r2_score
-from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+from sklearn.model_selection import GridSearchCV, train_test_split
+
+from stagecoachml import StagecoachRegressor
 
 # Load data as a DataFrame
 diabetes = load_diabetes(as_frame=True)

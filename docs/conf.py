@@ -57,28 +57,20 @@ master_doc = "index"
 # HTML output options
 html_theme = "furo"
 html_title = "StagecoachML"
-html_static_path = ["_static"] if os.path.exists("_static") else []
+html_static_path = []
 
 # Theme options
 html_theme_options = {
-    "light_logo": "logo-light.png",
-    "dark_logo": "logo-dark.png",
     "sidebar_hide_name": False,
     "navigation_with_keys": True,
     "top_of_page_button": "edit",
 }
 
 # Furo specific
-html_favicon = "_static/favicon.ico" if os.path.exists("_static/favicon.ico") else None
+html_favicon = None
 
 # Custom CSS
-html_css_files = (
-    [
-        "custom.css",
-    ]
-    if os.path.exists("_static/custom.css")
-    else []
-)
+html_css_files = []
 
 # Autodoc configuration
 autodoc_default_options = {
