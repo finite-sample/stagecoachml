@@ -1,0 +1,39 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "StagecoachML: Machine Learning Pipeline Orchestration Framework"
+abstract: "A powerful and intuitive machine learning pipeline orchestration framework that makes building, managing, and deploying ML workflows as easy as riding a stagecoach."
+authors:
+  - family-names: "Sood"
+    given-names: "Gaurav"
+    orcid: "https://orcid.org/0000-0002-2536-4498"
+    email: "contact@gsood.com"
+version: "0.1.0"
+date-released: "2025-11-25"
+url: "https://github.com/finite-sample/stagecoachml"
+repository-code: "https://github.com/finite-sample/stagecoachml"
+documentation: "https://finite-sample.github.io/stagecoachml/"
+license: "MIT"
+keywords:
+  - "machine learning"
+  - "ml pipeline"
+  - "data science"
+  - "orchestration"
+  - "workflow"
+  - "automation"
+  - "model training"
+  - "feature engineering"
+  - "dag"
+  - "etl"
+  - "python"
+preferred-citation:
+  type: software
+  title: "StagecoachML: Machine Learning Pipeline Orchestration Framework"
+  authors:
+    - family-names: "Sood"
+      given-names: "Gaurav"
+      orcid: "https://orcid.org/0000-0002-2536-4498"
+      email: "contact@gsood.com"
+  version: "0.1.0"
+  url: "https://github.com/finite-sample/stagecoachml"
+  year: 2025
