@@ -26,6 +26,7 @@ extensions = [
     "sphinx_copybutton",
     "sphinx_design",
     "nbsphinx",
+    "sphinx_thebe",
 ]
 
 # MyST parser configuration
@@ -113,3 +114,12 @@ copybutton_prompt_is_regexp = True
 
 # nbsphinx configuration
 nbsphinx_execute = "never"  # Don't execute notebooks during build
+
+# Thebe configuration
+thebe_config = {
+    "repository_url": "https://github.com/finite-sample/stagecoachml",
+    "repository_branch": "main",
+    "selector": "div.highlight-python",  # Make Python code blocks interactive
+    "selector_output": "div.output",
+    "codemirror_theme": "default",
+}

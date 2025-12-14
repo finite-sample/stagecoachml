@@ -3,6 +3,7 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/stagecoachml.svg)](https://pypi.org/project/stagecoachml)
 [![Tests](https://github.com/finite-sample/stagecoachml/actions/workflows/ci.yml/badge.svg)](https://github.com/finite-sample/stagecoachml/actions/workflows/ci.yml)
 [![Documentation](https://github.com/finite-sample/stagecoachml/actions/workflows/docs.yml/badge.svg)](https://finite-sample.github.io/stagecoachml/)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/finite-sample/stagecoachml/main)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **StagecoachML** is a tiny library for building two-stage models when your features arrive in two batches at different times.
@@ -62,6 +63,12 @@ At inference time you can:
 Under the hood, you still train and cross-validate it like any other sklearn estimator.
 
 ---
+
+## Try it Online
+
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/finite-sample/stagecoachml/main?labpath=docs%2Fnotebooks%2Fquickstart_interactive.ipynb)
+
+Click the badge above to try StagecoachML directly in your browser with interactive examples - no installation required!
 
 ## Installation
 

@@ -5,6 +5,14 @@
 :relative-images:
 ```
 
+## Interactive Examples
+
+```{button-link} notebooks/quickstart_interactive.ipynb
+:color: primary
+:expand:
+Try StagecoachML in your browser with Binder!
+```
+
 ## Contents
 
 ```{toctree}
@@ -12,6 +20,7 @@
 :caption: Getting Started
 
 quickstart
+notebooks/quickstart_interactive
 installation
 tutorials/index
 ```
