@@ -7,11 +7,13 @@
 
 ## Interactive Examples
 
-```{button-link} notebooks/quickstart_interactive.ipynb
+```{button-link} lite/notebooks/index.html?path=quickstart_interactive.ipynb
 :color: primary
 :expand:
-Try StagecoachML in your browser with Binder!
+🚀 Try StagecoachML in Your Browser!
 ```
+
+Try StagecoachML with zero installation - runs completely in your browser using Pyodide!
 
 ## Contents
 

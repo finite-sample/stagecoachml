@@ -26,7 +26,7 @@ extensions = [
     "myst_nb",
     "sphinx_copybutton",
     "sphinx_design",
-    "sphinx_thebe",
+    "jupyterlite_sphinx",
 ]
 
 # MyST parser configuration
@@ -119,11 +119,9 @@ copybutton_prompt_is_regexp = True
 nb_execution_mode = "off"  # Don't execute notebooks during build
 nb_execution_timeout = 60  # Timeout in seconds if execution is enabled
 
-# Thebe configuration
-thebe_config = {
-    "repository_url": "https://github.com/finite-sample/stagecoachml",
-    "repository_branch": "main",
-    "selector": "div.highlight-python",  # Make Python code blocks interactive
-    "selector_output": "div.output",
-    "codemirror_theme": "default",
-}
+# JupyterLite configuration
+jupyterlite_config = "jupyter_lite_config.json"
+jupyterlite_contents = ["notebooks/"]
+
+# Configure JupyterLite with Pyodide kernel
+jupyterlite_bind_ipynb_suffix = False

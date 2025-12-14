@@ -65,11 +65,11 @@ docs = [
     "sphinx>=7.2.0",
     "furo>=2023.9.10",
     "sphinx-autodoc-typehints>=1.25.0",
-    "myst-parser>=2.0.0",
     "myst-nb>=1.0.0",
     "sphinx-copybutton>=0.5.2",
     "sphinx-design>=0.5.0",
-    "sphinx-thebe>=0.3.0",
+    "jupyterlite-sphinx>=0.11.0",
+    "jupyterlite-pyodide-kernel>=0.4.0",
     "jupyter>=1.0.0"
 ]
 all = [
@@ -215,3 +215,9 @@ exclude_lines = [
 ]
 precision = 2
 show_missing = true
+
+[dependency-groups]
+dev = [
+    "jupyterlite-pyodide-kernel>=0.7.0",
+    "jupyterlite-sphinx>=0.22.0",
+]
