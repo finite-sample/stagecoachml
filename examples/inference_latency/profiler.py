@@ -1,4 +1,16 @@
-"""Utility functions for StagecoachML."""
+"""Performance profiling utilities for StagecoachML.
+
+This module contains profiling functionality that was moved from the core
+stagecoachml package to avoid dependencies that are incompatible with
+browser environments (Pyodide/JupyterLite).
+
+Users can copy this profiling code into their own projects if they need
+performance measurement capabilities.
+
+Requirements:
+- psutil>=5.8.0 (for memory tracking)
+- numpy>=1.20.0
+"""
 
 import logging
 import time

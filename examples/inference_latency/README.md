@@ -29,12 +29,24 @@ We compare three approaches:
 2. **Two-stage model**: Early prediction → refinement with late features  
 3. **Cached two-stage**: Pre-computed stage-1 predictions for repeated inference
 
-## Running the Benchmark
+## Installation
+
+Install the profiling dependencies:
 
 ```bash
 cd examples/inference_latency
+pip install -r requirements.txt
+```
+
+## Running the Benchmark
+
+```bash
 python latency_benchmark.py
 ```
+
+## Profiling Utilities
+
+This directory also contains `profiler.py` - a complete performance profiling utility that was moved from the core StagecoachML package to maintain browser compatibility. You can copy this profiler to your own projects if you need performance measurement capabilities.
 
 ## Expected Results
 

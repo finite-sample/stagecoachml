@@ -1,37 +1,20 @@
-# Utilities API
+# Performance Profiling
 
-```{eval-rst}
-.. automodule:: stagecoachml.utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
-```
+The performance profiling functionality has been moved to the examples directory to avoid dependencies that are incompatible with browser environments (Pyodide/JupyterLite).
 
-## LatencyProfiler
+## Profiling Example
 
-```{eval-rst}
-.. autoclass:: stagecoachml.utils.LatencyProfiler
-   :members:
-   :special-members: __init__
-   :show-inheritance:
-```
+See the complete profiling implementation in:
+- **`examples/inference_latency/profiler.py`** - Full profiling utilities
+- **`examples/inference_latency/latency_benchmark.py`** - Benchmarking example
 
-## Utility Functions
+## Using the Profiler
 
-```{eval-rst}
-.. autofunction:: stagecoachml.utils.benchmark_predictions
-```
-
-```{eval-rst}
-.. autofunction:: stagecoachml.utils.compare_stage_performance
-```
-
-## Usage Examples
-
-### Profiling Latency
+If you need performance profiling in your own project, you can copy the profiler from the examples:
 
 ```python
-from stagecoachml.utils import LatencyProfiler
+# Copy profiler.py from examples/inference_latency/ to your project
+from profiler import LatencyProfiler
 import time
 
 profiler = LatencyProfiler()
@@ -51,25 +34,17 @@ print(f"Mean time: {stats['mean_ms']:.2f}ms")
 profiler.print_summary()
 ```
 
-### Benchmarking Model Performance
+## Requirements
 
-```python
-from stagecoachml.utils import benchmark_predictions
-from stagecoachml import StagecoachRegressor
-from sklearn.datasets import load_diabetes
-
-# Set up data and model
-diabetes = load_diabetes(as_frame=True)
-X = diabetes.frame.drop(columns=["target"])
-# ... (model setup)
-
-# Benchmark predictions
-results = benchmark_predictions(
-    models={"stagecoach": model},
-    X=X.values[:100],
-    n_runs=10
-)
-
-for model_name, stats in results.items():
-    print(f"{model_name}: {stats['mean_ms']:.2f}ms avg")
+The profiler requires additional dependencies:
+```bash
+pip install psutil>=5.8.0  # For memory tracking
 ```
+
+## Complete Example
+
+For a complete benchmarking example, see `examples/inference_latency/latency_benchmark.py` which demonstrates:
+- Comparing single-stage vs two-stage model performance
+- Memory usage tracking
+- Realistic feature arrival scenarios
+- Performance analysis and reporting
