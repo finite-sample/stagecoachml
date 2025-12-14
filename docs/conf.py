@@ -1,11 +1,12 @@
 """Configuration file for the Sphinx documentation builder."""
 
-import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
 # Add source directory to path
-sys.path.insert(0, os.path.abspath("../src"))
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 # Project information
 project = "StagecoachML"
@@ -22,10 +23,9 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.githubpages",
     "sphinx_autodoc_typehints",
-    "myst_parser",
+    "myst_nb",
     "sphinx_copybutton",
     "sphinx_design",
-    "nbsphinx",
     "sphinx_thebe",
 ]
 
@@ -38,6 +38,8 @@ myst_enable_extensions = [
     "smartquotes",
     "replacements",
     "strikethrough",
+    "dollarmath",
+    "amsmath",
 ]
 
 # Add any paths that contain templates here
@@ -49,7 +51,8 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 # The suffix(es) of source filenames
 source_suffix = {
     ".rst": "restructuredtext",
-    ".md": "markdown",
+    ".md": "myst-nb",
+    ".ipynb": "myst-nb",
 }
 
 # The master toctree document
@@ -112,8 +115,9 @@ intersphinx_mapping = {
 copybutton_prompt_text = r">>> |\.\.\. |\$ |In \[\d*\]: | {2,5}\.\.\.: | {5,8}: "
 copybutton_prompt_is_regexp = True
 
-# nbsphinx configuration
-nbsphinx_execute = "never"  # Don't execute notebooks during build
+# myst-nb configuration
+nb_execution_mode = "off"  # Don't execute notebooks during build
+nb_execution_timeout = 60  # Timeout in seconds if execution is enabled
 
 # Thebe configuration
 thebe_config = {

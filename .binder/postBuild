@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# Install the current package in development mode
+pip install -e .
+
+# Enable JupyterLab extensions for better notebook experience
+jupyter lab build --minimize=False

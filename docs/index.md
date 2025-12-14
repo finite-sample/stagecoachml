@@ -21,19 +21,6 @@ Try StagecoachML in your browser with Binder!
 
 quickstart
 notebooks/quickstart_interactive
-installation
-tutorials/index
-```
-
-```{toctree}
-:maxdepth: 2
-:caption: User Guide
-
-user_guide/pipelines
-user_guide/stages
-user_guide/configuration
-user_guide/cli
-user_guide/custom_stages
 ```
 
 ```{toctree}
@@ -50,15 +37,6 @@ examples/index
 api/pipeline
 api/stage
 api/cli
-```
-
-```{toctree}
-:maxdepth: 1
-:caption: Development
-
-contributing
-changelog
-license
 ```
 
 ## Indices and tables
