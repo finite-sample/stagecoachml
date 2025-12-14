@@ -3,7 +3,7 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/stagecoachml.svg)](https://pypi.org/project/stagecoachml)
 [![Tests](https://github.com/finite-sample/stagecoachml/actions/workflows/ci.yml/badge.svg)](https://github.com/finite-sample/stagecoachml/actions/workflows/ci.yml)
 [![Documentation](https://github.com/finite-sample/stagecoachml/actions/workflows/docs.yml/badge.svg)](https://finite-sample.github.io/stagecoachml/)
-[![Try in Browser](https://img.shields.io/badge/Try%20in%20Browser-JupyterLite-orange)](https://finite-sample.github.io/stagecoachml/)
+[![Try in Browser](https://img.shields.io/badge/Try%20in%20Browser-JupyterLite-orange)](https://finite-sample.github.io/stagecoachml/lite/lab/index.html?path=quickstart_interactive.ipynb)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **StagecoachML** is a tiny library for building two-stage models when your features arrive in two batches at different times.
@@ -66,7 +66,7 @@ Under the hood, you still train and cross-validate it like any other sklearn est
 
 ## Try it Online
 
-[![Try in Browser](https://img.shields.io/badge/Try%20in%20Browser-JupyterLite-orange)](https://finite-sample.github.io/stagecoachml/)
+[![Try in Browser](https://img.shields.io/badge/Try%20in%20Browser-JupyterLite-orange)](https://finite-sample.github.io/stagecoachml/lite/lab/index.html?path=quickstart_interactive.ipynb)
 
 Click the badge above to try StagecoachML directly in your browser with interactive examples powered by Pyodide - runs instantly with zero installation!
 
