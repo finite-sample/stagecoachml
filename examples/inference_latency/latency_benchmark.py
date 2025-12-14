@@ -10,6 +10,7 @@ item/creative features are retrieved based on initial filtering.
 """
 
 import numpy as np
+from profiler import LatencyProfiler
 from sklearn.datasets import fetch_california_housing
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.linear_model import LinearRegression
@@ -17,7 +18,6 @@ from sklearn.metrics import r2_score
 from sklearn.model_selection import train_test_split
 
 from stagecoachml import StagecoachRegressor
-from stagecoachml.utils import LatencyProfiler
 
 
 def create_realistic_feature_split():

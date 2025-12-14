@@ -57,24 +57,3 @@ jobs:
           verbose: true
           print-hash: true
 
-  publish-to-testpypi:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-    environment:
-      name: testpypi
-      url: https://test.pypi.org/project/stagecoachml/
-      
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-          
-      - name: Publish to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
-          verbose: true
-          print-hash: true

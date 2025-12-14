@@ -1,54 +1,16 @@
-# Stage API
+# Classification API
 
 ```{eval-rst}
-.. automodule:: stagecoachml.stage
+.. automodule:: stagecoachml.classification
    :members:
    :undoc-members:
    :show-inheritance:
 ```
 
-## Base Stage Class
+## StagecoachClassifier
 
 ```{eval-rst}
-.. autoclass:: stagecoachml.stage.Stage
-   :members:
-   :special-members: __init__
-   :show-inheritance:
-```
-
-## Built-in Stages
-
-### FunctionStage
-
-```{eval-rst}
-.. autoclass:: stagecoachml.stage.FunctionStage
-   :members:
-   :special-members: __init__
-   :show-inheritance:
-```
-
-### DataLoaderStage
-
-```{eval-rst}
-.. autoclass:: stagecoachml.stage.DataLoaderStage
-   :members:
-   :special-members: __init__
-   :show-inheritance:
-```
-
-### TransformStage
-
-```{eval-rst}
-.. autoclass:: stagecoachml.stage.TransformStage
-   :members:
-   :special-members: __init__
-   :show-inheritance:
-```
-
-### ModelStage
-
-```{eval-rst}
-.. autoclass:: stagecoachml.stage.ModelStage
+.. autoclass:: stagecoachml.classification.StagecoachClassifier
    :members:
    :special-members: __init__
    :show-inheritance:
@@ -56,114 +18,43 @@
 
 ## Usage Examples
 
-### Function Stage
+### Basic Usage
 
 ```python
-from stagecoachml.stage import FunctionStage
+from stagecoachml import StagecoachClassifier
+from sklearn.datasets import load_breast_cancer
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 
-def my_processing_function(context):
-    data = context.get("input_data", [])
-    processed = [x * 2 for x in data]
-    return {"processed_data": processed}
+# Load data
+data = load_breast_cancer(as_frame=True)
+X = data.data
+y = data.target
 
-stage = FunctionStage(
-    name="process_data",
-    func=my_processing_function,
-    description="Double all input values"
-)
-```
+# Split features
+features = list(X.columns)
+mid = len(features) // 2
+early_features = features[:mid]
+late_features = features[mid:]
 
-### Data Loader Stage
-
-```python
-from stagecoachml.stage import DataLoaderStage
-
-# Load CSV data
-loader = DataLoaderStage(
-    name="load_csv",
-    source_type="csv",
-    source_path="data.csv",
-    output_key="raw_data"
-)
-
-# Load Parquet data
-loader = DataLoaderStage(
-    name="load_parquet",
-    source_type="parquet",
-    source_path="data.parquet"
-)
-```
-
-### Transform Stage
-
-```python
-from stagecoachml.stage import TransformStage
-
-def normalize_data(data):
-    # Custom normalization logic
-    mean = data.mean()
-    std = data.std()
-    return (data - mean) / std
-
-transformer = TransformStage(
-    name="normalize",
-    input_key="raw_data",
-    output_key="normalized_data",
-    transform_func=normalize_data
-)
-```
-
-### Model Stage
-
-```python
-from stagecoachml.stage import ModelStage
-
-# Training stage
-trainer = ModelStage(
-    name="train_classifier",
-    model_type="train",
-    model_class="RandomForest",
-    input_features="X_train",
-    input_target="y_train"
+# Create model
+model = StagecoachClassifier(
+    stage1_estimator=LogisticRegression(max_iter=1000),
+    stage2_estimator=RandomForestClassifier(),
+    early_features=early_features,
+    late_features=late_features,
+    use_stage1_pred_as_feature=True,
 )
 
-# Prediction stage
-predictor = ModelStage(
-    name="make_predictions",
-    model_type="predict",
-    input_features="X_test"
-)
-```
+# Train and predict
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y)
+model.fit(X_train, y_train)
 
-## Creating Custom Stages
+# Get stage-1 probabilities (early features only)
+stage1_proba = model.predict_stage1_proba(X_test)
 
-```python
-from stagecoachml.stage import Stage
-from typing import Any, Dict
-
-class CustomStage(Stage):
-    """A custom processing stage."""
-    
-    def execute(self, context: Dict[str, Any]) -> Any:
-        """Execute custom logic."""
-        # Your custom implementation here
-        input_data = context.get("input_key")
-        
-        # Perform custom processing
-        result = self.custom_processing(input_data)
-        
-        return {"output_key": result}
-    
-    def custom_processing(self, data):
-        """Custom processing logic."""
-        # Implement your processing here
-        return data
-    
-    def validate_inputs(self, context: Dict[str, Any]) -> bool:
-        """Validate stage inputs."""
-        return "input_key" in context
-    
-    def validate_outputs(self, result: Any) -> bool:
-        """Validate stage outputs."""
-        return isinstance(result, dict) and "output_key" in result
+# Get final predictions (all features)
+final_pred = model.predict(X_test)
+final_proba = model.predict_proba(X_test)
 ```

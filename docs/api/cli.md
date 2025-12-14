@@ -1,151 +1,50 @@
-# CLI API
+# Performance Profiling
 
-```{eval-rst}
-.. automodule:: stagecoachml.cli
-   :members:
-   :undoc-members:
-   :show-inheritance:
+The performance profiling functionality has been moved to the examples directory to avoid dependencies that are incompatible with browser environments (Pyodide/JupyterLite).
+
+## Profiling Example
+
+See the complete profiling implementation in:
+- **`examples/inference_latency/profiler.py`** - Full profiling utilities
+- **`examples/inference_latency/latency_benchmark.py`** - Benchmarking example
+
+## Using the Profiler
+
+If you need performance profiling in your own project, you can copy the profiler from the examples:
+
+```python
+# Copy profiler.py from examples/inference_latency/ to your project
+from profiler import LatencyProfiler
+import time
+
+profiler = LatencyProfiler()
+
+# Profile some operations
+with profiler.profile("fast_operation"):
+    time.sleep(0.01)
+
+with profiler.profile("slow_operation"):
+    time.sleep(0.1)
+
+# Get statistics
+stats = profiler.get_stats("fast_operation")
+print(f"Mean time: {stats['mean_ms']:.2f}ms")
+
+# Print summary
+profiler.print_summary()
 ```
 
-## Command Reference
+## Requirements
 
-### version
-
-Show version information.
-
+The profiler requires additional dependencies:
 ```bash
-stagecoach version
+pip install psutil>=5.8.0  # For memory tracking
 ```
 
-### run
+## Complete Example
 
-Run a pipeline from a configuration file.
-
-```bash
-stagecoach run pipeline.yaml [OPTIONS]
-```
-
-**Options:**
-- `--verbose, -v`: Enable verbose output
-- `--dry-run`: Show execution plan without running
-
-**Examples:**
-
-```bash
-# Run a pipeline
-stagecoach run my_pipeline.yaml
-
-# Verbose output
-stagecoach run my_pipeline.yaml --verbose
-
-# Dry run to see execution plan
-stagecoach run my_pipeline.yaml --dry-run
-```
-
-### validate
-
-Validate a pipeline configuration file.
-
-```bash
-stagecoach validate pipeline.yaml
-```
-
-**Examples:**
-
-```bash
-# Validate configuration
-stagecoach validate my_pipeline.yaml
-```
-
-### list-stages
-
-List all stages in a pipeline configuration.
-
-```bash
-stagecoach list-stages pipeline.yaml
-```
-
-**Examples:**
-
-```bash
-# List stages
-stagecoach list-stages my_pipeline.yaml
-```
-
-## Configuration File Format
-
-The CLI accepts YAML configuration files with the following structure:
-
-```yaml
-pipeline:
-  name: my_pipeline
-  description: Description of the pipeline
-
-stages:
-  - name: stage1
-    type: data_loader
-    source_type: csv
-    source_path: data.csv
-    
-  - name: stage2
-    type: transform
-    input_key: data
-    output_key: features
-    
-  - name: stage3
-    type: model
-    model_type: train
-    model_class: RandomForest
-
-dependencies:
-  - [stage1, stage2]
-  - [stage2, stage3]
-```
-
-## Usage Examples
-
-### Running a Simple Pipeline
-
-Create a file `iris_pipeline.yaml`:
-
-```yaml
-pipeline:
-  name: iris_classifier
-  description: Classify iris species
-
-stages:
-  - name: load_data
-    type: data_loader
-    source_type: csv
-    source_path: iris.csv
-    
-  - name: train_model
-    type: model
-    model_type: train
-    model_class: RandomForest
-    
-dependencies:
-  - [load_data, train_model]
-```
-
-Run it:
-
-```bash
-stagecoach run iris_pipeline.yaml
-```
-
-### Validation Workflow
-
-```bash
-# First validate the configuration
-stagecoach validate iris_pipeline.yaml
-
-# Check the stages
-stagecoach list-stages iris_pipeline.yaml
-
-# Do a dry run
-stagecoach run iris_pipeline.yaml --dry-run
-
-# Actually run it
-stagecoach run iris_pipeline.yaml
-```
+For a complete benchmarking example, see `examples/inference_latency/latency_benchmark.py` which demonstrates:
+- Comparing single-stage vs two-stage model performance
+- Memory usage tracking
+- Realistic feature arrival scenarios
+- Performance analysis and reporting

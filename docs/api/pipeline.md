@@ -1,16 +1,16 @@
-# Pipeline API
+# Regression API
 
 ```{eval-rst}
-.. automodule:: stagecoachml.pipeline
+.. automodule:: stagecoachml.regression
    :members:
    :undoc-members:
    :show-inheritance:
 ```
 
-## Pipeline Class
+## StagecoachRegressor
 
 ```{eval-rst}
-.. autoclass:: stagecoachml.pipeline.Pipeline
+.. autoclass:: stagecoachml.regression.StagecoachRegressor
    :members:
    :special-members: __init__
    :show-inheritance:
@@ -18,62 +18,43 @@
 
 ## Usage Examples
 
-### Creating a Pipeline
+### Basic Usage
 
 ```python
-from stagecoachml import Pipeline
+from stagecoachml import StagecoachRegressor
+from sklearn.datasets import load_diabetes
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
 
-# Create an empty pipeline
-pipeline = Pipeline(name="my_pipeline")
+# Load data
+diabetes = load_diabetes(as_frame=True)
+X = diabetes.frame.drop(columns=["target"])
+y = diabetes.frame["target"]
 
-# Create with configuration
-pipeline = Pipeline(
-    name="configured_pipeline",
-    config={
-        "max_retries": 3,
-        "timeout": 300
-    }
+# Split features
+features = list(X.columns)
+mid = len(features) // 2
+early_features = features[:mid]
+late_features = features[mid:]
+
+# Create model
+model = StagecoachRegressor(
+    stage1_estimator=LinearRegression(),
+    stage2_estimator=RandomForestRegressor(),
+    early_features=early_features,
+    late_features=late_features,
+    residual=True,
+    use_stage1_pred_as_feature=True,
 )
-```
 
-### Adding Stages
+# Train and predict
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+model.fit(X_train, y_train)
 
-```python
-from stagecoachml.stage import FunctionStage
+# Get stage-1 predictions (early features only)
+stage1_pred = model.predict_stage1(X_test)
 
-def my_function(context):
-    return {"result": "success"}
-
-stage = FunctionStage(name="my_stage", func=my_function)
-pipeline.add_stage(stage)
-```
-
-### Defining Dependencies
-
-```python
-# Add a dependency between stages
-pipeline.add_dependency("stage1", "stage2")
-
-# This ensures stage1 runs before stage2
-```
-
-### Running the Pipeline
-
-```python
-# Run with default context
-results = pipeline.run()
-
-# Run with custom context
-results = pipeline.run({"custom_param": "value"})
-```
-
-### Validation
-
-```python
-# Validate pipeline structure
-is_valid = pipeline.validate()
-
-# Get execution order
-order = pipeline.get_execution_order()
-print(f"Stages will execute in order: {order}")
+# Get final predictions (all features)
+final_pred = model.predict(X_test)
 ```
