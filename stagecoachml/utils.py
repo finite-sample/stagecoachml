@@ -1,10 +1,13 @@
 """Utility functions for StagecoachML."""
 
+import logging
 import time
 from typing import Any
 
 import numpy as np
 import psutil
+
+logger = logging.getLogger(__name__)
 
 
 class LatencyProfiler:
@@ -62,16 +65,16 @@ class LatencyProfiler:
 
     def print_summary(self):
         """Print a summary of all measurements."""
-        print("=== Latency Profile Summary ===")
+        logger.info("=== Latency Profile Summary ===")
         for name in self.times:
             stats = self.get_stats(name)
-            print(f"{name}:")
-            print(f"  Mean: {stats['mean_ms']:.2f}ms")
-            print(f"  Median: {stats['median_ms']:.2f}ms")
-            print(f"  Std: {stats['std_ms']:.2f}ms")
-            print(f"  Range: {stats['min_ms']:.2f}ms - {stats['max_ms']:.2f}ms")
-            print(f"  Count: {stats['count']}")
-            print()
+            logger.info("%s:", name)
+            logger.info("  Mean: %.2fms", stats['mean_ms'])
+            logger.info("  Median: %.2fms", stats['median_ms'])
+            logger.info("  Std: %.2fms", stats['std_ms'])
+            logger.info("  Range: %.2fms - %.2fms", stats['min_ms'], stats['max_ms'])
+            logger.info("  Count: %d", stats['count'])
+            logger.info("")
 
 
 class _TimingContext:
