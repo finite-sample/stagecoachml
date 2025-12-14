@@ -69,11 +69,11 @@ class LatencyProfiler:
         for name in self.times:
             stats = self.get_stats(name)
             logger.info("%s:", name)
-            logger.info("  Mean: %.2fms", stats['mean_ms'])
-            logger.info("  Median: %.2fms", stats['median_ms'])
-            logger.info("  Std: %.2fms", stats['std_ms'])
-            logger.info("  Range: %.2fms - %.2fms", stats['min_ms'], stats['max_ms'])
-            logger.info("  Count: %d", stats['count'])
+            logger.info("  Mean: %.2fms", stats["mean_ms"])
+            logger.info("  Median: %.2fms", stats["median_ms"])
+            logger.info("  Std: %.2fms", stats["std_ms"])
+            logger.info("  Range: %.2fms - %.2fms", stats["min_ms"], stats["max_ms"])
+            logger.info("  Count: %d", stats["count"])
             logger.info("")
 
 
