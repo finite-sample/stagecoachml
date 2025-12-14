@@ -7,7 +7,7 @@
 
 ## Interactive Examples
 
-```{button-link} lite/notebooks/index.html?path=quickstart_interactive.ipynb
+```{button-link} lite/lab/index.html?path=quickstart_interactive.ipynb
 :color: primary
 :expand:
 🚀 Try StagecoachML in Your Browser!
@@ -22,7 +22,6 @@ Try StagecoachML with zero installation - runs completely in your browser using 
 :caption: Getting Started
 
 quickstart
-notebooks/quickstart_interactive
 ```
 
 ```{toctree}
