@@ -1,7 +1,7 @@
 """StagecoachML - A library for two-stage machine learning models."""
 
 import logging
-from importlib.metadata import PackageNotFoundError, version
+from importlib.metadata import version
 
 from stagecoachml.classification import StagecoachClassifier
 from stagecoachml.regression import StagecoachRegressor
