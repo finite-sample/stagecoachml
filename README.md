@@ -323,6 +323,6 @@ python -m examples.classification_example
   cross-validation.
 * This library is *not* a general DAG/workflow engine. If you want full pipeline
   orchestration (scheduling, retries, monitoring, etc.), you probably want
-  Airflow/Prefect/etc. StagecoachML is about one very specific modelling pattern:
+  Airflow/Prefect/etc. StagecoachML is about one very specific modeling pattern:
   staged feature arrival.
 
