@@ -4,7 +4,8 @@
 [![Tests](https://github.com/finite-sample/stagecoachml/actions/workflows/ci.yml/badge.svg)](https://github.com/finite-sample/stagecoachml/actions/workflows/ci.yml)
 [![Documentation](https://github.com/finite-sample/stagecoachml/actions/workflows/docs.yml/badge.svg)](https://finite-sample.github.io/stagecoachml/)
 [![Try in Browser](https://img.shields.io/badge/Try%20in%20Browser-JupyterLite-orange)](https://finite-sample.github.io/stagecoachml/lite/lab/index.html?path=quickstart_interactive.ipynb)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI Downloads](https://static.pepy.tech/badge/stagecoachml)](https://pepy.tech/projects/stagecoachml)
+
 
 **StagecoachML** is a tiny library for building two-stage models when your features arrive in two batches at different times.
 
