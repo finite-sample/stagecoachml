@@ -35,9 +35,8 @@ examples/index
 :maxdepth: 2
 :caption: API Reference
 
-api/pipeline
-api/stage
-api/cli
+api/regression
+api/classification
 ```
 
 ## Indices and tables

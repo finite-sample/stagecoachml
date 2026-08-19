@@ -104,7 +104,9 @@ class TestStagecoachBase:
         stage1 = LinearRegression()
         stage2 = LinearRegression()
 
-        base = MockStagecoachEstimator(stage1, stage2, early_features=["nonexistent_feature"])
+        base = MockStagecoachEstimator(
+            stage1, stage2, early_features=["nonexistent_feature"]
+        )
 
         with pytest.raises(ValueError, match="Early features not found in data"):
             base._validate_features(df)
@@ -115,7 +117,9 @@ class TestStagecoachBase:
         stage1 = LinearRegression()
         stage2 = LinearRegression()
 
-        base = MockStagecoachEstimator(stage1, stage2, late_features=["nonexistent_feature"])
+        base = MockStagecoachEstimator(
+            stage1, stage2, late_features=["nonexistent_feature"]
+        )
 
         with pytest.raises(ValueError, match="Late features not found in data"):
             base._validate_features(df)
@@ -314,44 +318,33 @@ class TestValidationUtilities:
 
     def test_validate_cv_parameter_invalid(self):
         """Test invalid CV parameter validation."""
-        with pytest.raises(ValueError, match="inner_cv must be None or an integer >= 2"):
+        with pytest.raises(
+            ValueError, match="inner_cv must be None or an integer >= 2"
+        ):
             validate_cv_parameter(1)
 
-        with pytest.raises(ValueError, match="inner_cv must be None or an integer >= 2"):
+        with pytest.raises(
+            ValueError, match="inner_cv must be None or an integer >= 2"
+        ):
             validate_cv_parameter("invalid")
 
-        with pytest.raises(ValueError, match="inner_cv must be None or an integer >= 2"):
+        with pytest.raises(
+            ValueError, match="inner_cv must be None or an integer >= 2"
+        ):
             validate_cv_parameter(0)
 
     def test_check_consistent_length_features_valid(self):
         """Test feature consistency check with valid features."""
-        X = pd.DataFrame(
-            {
-                "early_1": [1, 2, 3],
-                "early_2": [2, 4, 6],
-                "late_1": [3, 6, 9],
-                "late_2": [4, 8, 12],
-            }
-        )
-
         early_features = ["early_1", "early_2"]
         late_features = ["late_1", "late_2"]
 
         # Should not raise
-        check_consistent_length_features(early_features, late_features, X)
+        check_consistent_length_features(early_features, late_features)
 
     def test_check_consistent_length_features_overlap(self):
         """Test feature consistency check with overlapping features."""
-        X = pd.DataFrame(
-            {
-                "feature_1": [1, 2, 3],
-                "feature_2": [2, 4, 6],
-                "feature_3": [3, 6, 9],
-            }
-        )
-
         early_features = ["feature_1", "feature_2"]
         late_features = ["feature_2", "feature_3"]  # feature_2 overlaps
 
         with pytest.raises(ValueError, match="Features cannot be both early and late"):
-            check_consistent_length_features(early_features, late_features, X)
+            check_consistent_length_features(early_features, late_features)

@@ -64,7 +64,9 @@ def basic_classification_estimators():
 
 
 @pytest.fixture
-def fitted_stagecoach_regressor(sample_regression_dataframe, basic_regression_estimators):
+def fitted_stagecoach_regressor(
+    sample_regression_dataframe, basic_regression_estimators
+):
     """Create a fitted StagecoachRegressor for testing."""
     X_df, y = sample_regression_dataframe
     stage1, stage2 = basic_regression_estimators
@@ -80,7 +82,9 @@ def fitted_stagecoach_regressor(sample_regression_dataframe, basic_regression_es
 
 
 @pytest.fixture
-def fitted_stagecoach_classifier(sample_classification_dataframe, basic_classification_estimators):
+def fitted_stagecoach_classifier(
+    sample_classification_dataframe, basic_classification_estimators
+):
     """Create a fitted StagecoachClassifier for testing."""
     X_df, y = sample_classification_dataframe
     stage1, stage2 = basic_classification_estimators

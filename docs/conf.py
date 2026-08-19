@@ -1,40 +1,38 @@
-"""Configuration file for the Sphinx documentation builder."""
+"""Sphinx configuration — fleet standard via py-canon, plus this repo's extras."""
 
-import sys
-from datetime import datetime
-from pathlib import Path
+from py_canon.sphinx import configure
 
-# Add source directory to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+configure(globals())
 
-# Project information
-project = "StagecoachML"
-copyright = f"{datetime.now().year}, Gaurav Sood"
-author = "Gaurav Sood"
-release = "0.1.0"
-
-# General configuration
-extensions = [
-    "sphinx.ext.autodoc",
-    "sphinx.ext.autosummary",
-    "sphinx.ext.napoleon",
-    "sphinx.ext.viewcode",
-    "sphinx.ext.intersphinx",
+# Repo-specific additions layered on the fleet standard. The docs render an
+# executable notebook (myst-nb), a "try it in your browser" button
+# (sphinx-design), and a JupyterLite deployment of the notebook.
+#
+# myst_nb *is* myst_parser plus notebook support and registers it itself;
+# leaving both in the list makes the second setup() fail outright, so the
+# fleet-standard entry is swapped out rather than added to.
+# `configure()` writes `extensions` into this module's namespace, so it is read
+# back through globals() rather than as a bare name a linter cannot resolve.
+extensions = [e for e in globals()["extensions"] if e != "myst_parser"] + [
     "sphinx.ext.githubpages",
-    "sphinx_autodoc_typehints",
     "myst_nb",
-    "sphinx_copybutton",
     "sphinx_design",
     "jupyterlite_sphinx",
 ]
 
-# MyST parser configuration
+# myst-nb supersedes myst-parser as the markdown parser, so .md must be routed
+# to it or the two extensions fight over the suffix.
+source_suffix = {
+    ".rst": "restructuredtext",
+    ".md": "myst-nb",
+    ".ipynb": "myst-nb",
+}
+
 myst_enable_extensions = [
+    "colon_fence",
     "deflist",
     "tasklist",
     "html_image",
-    "colon_fence",
     "smartquotes",
     "replacements",
     "strikethrough",
@@ -42,41 +40,24 @@ myst_enable_extensions = [
     "amsmath",
 ]
 
-# Add any paths that contain templates here
-templates_path = ["_templates"]
+exclude_patterns = [
+    "_build",
+    "Thumbs.db",
+    ".DS_Store",
+    "**.ipynb_checkpoints",
+    # jupyterlite-sphinx copies the notebook into the Lite deployment; leaving
+    # it in the toctree as well would build it twice and warn about a document
+    # not included in any toctree.
+    "notebooks/**",
+]
 
-# List of patterns to exclude
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
-
-# The suffix(es) of source filenames
-source_suffix = {
-    ".rst": "restructuredtext",
-    ".md": "myst-nb",
-    ".ipynb": "myst-nb",
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "pandas": ("https://pandas.pydata.org/docs/", None),
+    "sklearn": ("https://scikit-learn.org/stable/", None),
 }
 
-# The master toctree document
-master_doc = "index"
-
-# HTML output options
-html_theme = "furo"
-html_title = "StagecoachML"
-html_static_path = ["_static"]
-
-# Theme options
-html_theme_options = {
-    "sidebar_hide_name": False,
-    "navigation_with_keys": True,
-    "top_of_page_button": "edit",
-}
-
-# Furo specific
-html_favicon = None
-
-# Custom CSS
-html_css_files = []
-
-# Autodoc configuration
 autodoc_default_options = {
     "members": True,
     "member-order": "bysource",
@@ -85,43 +66,19 @@ autodoc_default_options = {
     "exclude-members": "__weakref__",
     "show-inheritance": True,
 }
-
-autodoc_typehints = "description"
 autodoc_typehints_description_target = "documented"
 
-# Napoleon settings
-napoleon_google_docstring = True
-napoleon_numpy_docstring = True
-napoleon_include_init_with_doc = True
-napoleon_include_private_with_doc = False
-napoleon_include_special_with_doc = True
-napoleon_use_admonition_for_examples = True
-napoleon_use_admonition_for_notes = True
-napoleon_use_admonition_for_references = True
-napoleon_use_ivar = True
-napoleon_use_param = True
-napoleon_use_rtype = True
-
-# Intersphinx mapping
-intersphinx_mapping = {
-    "python": ("https://docs.python.org/3/", None),
-    "numpy": ("https://numpy.org/doc/stable/", None),
-    "pandas": ("https://pandas.pydata.org/docs/", None),
-    "sklearn": ("https://scikit-learn.org/stable/", None),
-    "pydantic": ("https://docs.pydantic.dev/latest/", None),
-}
-
-# Copy button configuration
 copybutton_prompt_text = r">>> |\.\.\. |\$ |In \[\d*\]: | {2,5}\.\.\.: | {5,8}: "
 copybutton_prompt_is_regexp = True
 
-# myst-nb configuration
-nb_execution_mode = "off"  # Don't execute notebooks during build
-nb_execution_timeout = 60  # Timeout in seconds if execution is enabled
+# Notebooks are committed with outputs; executing them at build time would make
+# the docs job depend on training models.
+nb_execution_mode = "off"
 
-# JupyterLite configuration
 jupyterlite_config = "jupyter_lite_config.json"
-jupyterlite_contents = ["notebooks/"]
-
-# Configure JupyterLite with Pyodide kernel
+# Named as a file, not as the directory: since jupyterlite-sphinx 0.23 a
+# directory keeps its name inside the Lite filesystem, which would move the
+# notebook to notebooks/quickstart_interactive.ipynb and break the
+# ?path=quickstart_interactive.ipynb links already published on PyPI.
+jupyterlite_contents = ["notebooks/quickstart_interactive.ipynb"]
 jupyterlite_bind_ipynb_suffix = False
