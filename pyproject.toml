@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv_build>=0.9.11,<0.10.0"]
+requires = ["uv_build>=0.12.5,<0.13"]
 build-backend = "uv_build"
 
 [project]
@@ -8,7 +8,8 @@ version = "0.2.0"
 description = "A library for two-stage machine learning models with staggered feature arrival"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     {name = "Gaurav Sood", email = "contact@gsood.com"}
 ]
@@ -31,48 +32,20 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed"
 ]
 dependencies = [
     "numpy>=1.20.0",
-    "pandas>=1.3.0", 
+    "pandas>=1.3.0",
     "scikit-learn>=1.0.0"
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.4.0",
-    "pytest-cov>=4.1.0",
-    "pytest-xdist>=3.5.0",
-    "pytest-mock>=3.12.0",
-    "hypothesis>=6.90.0",
-    "ruff>=0.1.0",
-    "mypy>=1.7.0",
-    "pre-commit>=3.5.0",
-    "types-pyyaml>=6.0.0",
-    "pandas-stubs>=2.0.0"
-]
-docs = [
-    "sphinx>=7.2.0",
-    "furo>=2023.9.10",
-    "sphinx-autodoc-typehints>=1.25.0",
-    "myst-nb>=1.0.0",
-    "sphinx-copybutton>=0.5.2",
-    "sphinx-design>=0.5.0",
-    "jupyterlite-sphinx>=0.11.0",
-    "jupyterlite-pyodide-kernel>=0.4.0",
-    "jupyter>=1.0.0"
-]
-all = [
-    "stagecoachml[dev,docs]"
 ]
 
 [project.urls]
@@ -86,87 +59,46 @@ Changelog = "https://github.com/finite-sample/stagecoachml/blob/main/CHANGELOG.m
 [tool.uv.build-backend]
 module-root = ""
 
-[tool.deptry]
-pep621_dev_dependency_groups = ["dev", "docs"]
-
-[tool.deptry.package_module_name_map]
-"types-pyyaml" = "types_pyyaml"
-
-
 [tool.ruff]
+line-length = 88
 target-version = "py311"
-line-length = 100
 src = ["stagecoachml", "tests"]
 extend-include = ["*.ipynb"]
 extend-exclude = ["examples/**"]
 
 [tool.ruff.lint]
-select = [
-    "E",    # pycodestyle errors
-    "W",    # pycodestyle warnings
-    "F",    # pyflakes
-    "I",    # isort
-    "B",    # flake8-bugbear
-    "C4",   # flake8-comprehensions
-    "UP",   # pyupgrade
-    "ARG",  # flake8-unused-arguments
-    "SIM",  # flake8-simplify
-    "PTH",  # flake8-use-pathlib
-    "RUF",  # ruff-specific rules
-    "N",    # pep8-naming
-    "D",    # pydocstyle
-    "TID",  # flake8-tidy-imports
-    "TCH",  # flake8-type-checking
-    "PL",   # pylint
-    "PT",   # flake8-pytest-style
-]
-ignore = [
-    "D100", # Missing docstring in public module
-    "D101", # Missing docstring in public class
-    "D102", # Missing docstring in public method
-    "D103", # Missing docstring in public function
-    "D104", # Missing docstring in public package
-    "D105", # Missing docstring in magic method
-    "D107", # Missing docstring in __init__
-    "D203", # 1 blank line required before class docstring
-    "D213", # Multi-line docstring summary should start at the second line
-    "PLR0913", # Too many arguments
-    "PLR2004", # Magic value used in comparison
-]
+external = ["DOC"]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "N", "D", "S", "SIM", "T20", "PT", "RUF", "PTH", "RET", "PIE", "FURB", "PERF", "DTZ", "LOG", "G", "TC", "FLY", "RSE", "SLOT", "FA", "A", "EXE", "ICN", "PGH", "PLE", "ARG", "SLF", "PL", "TCH", "TID"]
+# D203/D213: the google convention the fleet standard picks. W191/D206/D300:
+# ruff's own docs list these as always incompatible with `ruff format`, which
+# the standard also runs.
+ignore = ["D203", "D213", "W191", "D206", "D300", "D100", "D101", "D102", "D103", "D104", "D105", "D107", "PLR0913", "PLR2004"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
+# N803/N806: this is a scikit-learn estimator library, and sklearn's API *is*
+# capitalised — `fit(self, X, y)`, `X_early`, `X_late`. Renaming them to satisfy
+# pep8-naming would break the convention every user of the library reads by.
+# PLR0917: an sklearn estimator's hyperparameters must each be an explicit
+# named `__init__` parameter for `get_params`/`clone`/`GridSearchCV` to work,
+# so the count is set by the model, not by style.
+"stagecoachml/**" = ["N803", "N806", "PLR0917"]
+# Unused fixture arguments and private-member access are how tests are written;
+# PLC0415 covers imports deliberately deferred into a single test.
+"tests/**" = ["S101", "D", "ARG", "SLF", "N803", "N806", "PLC0415"]
+"docs/**" = ["D"]
+# A teaching notebook communicates by printing, and its output uses symbols
+# (ℹ) that RUF001 reads as homoglyphs.
+"docs/notebooks/**" = ["D", "T201", "RUF001", "N803", "N806"]
 "__init__.py" = ["F401", "D104"]
-"tests/*" = ["D", "S101", "ARG001", "ARG002", "ARG005", "N806", "PLC0415", "PT006", "SIM113", "UP035"]
-"docs/*" = ["D", "PTH100", "PTH110"]
-"stagecoachml/cli.py" = ["B008", "ARG001", "PTH123", "B904"]
-"stagecoachml/stage.py" = ["PLC0415", "N806", "ARG002", "D106", "D401", "TC003"]
-"stagecoachml/pipeline.py" = ["TC001", "D106", "B904"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["stagecoachml"]
 
 [tool.ruff.format]
 docstring-code-format = true
-
-[tool.mypy]
-python_version = "3.11"
-strict = true
-warn_return_any = true
-warn_unused_configs = true
-no_implicit_reexport = true
-namespace_packages = true
-show_error_codes = true
-show_column_numbers = true
-pretty = true
-
-[[tool.mypy.overrides]]
-module = [
-    "sklearn.*",
-    "joblib.*",
-    "networkx.*",
-    "yaml.*"
-]
-ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 minversion = "7.0"
@@ -193,8 +125,7 @@ branch = true
 source = ["stagecoachml"]
 omit = [
     "*/tests/*",
-    "*/__init__.py",
-    "*/cli.py"
+    "*/__init__.py"
 ]
 
 [tool.coverage.report]
@@ -215,8 +146,42 @@ exclude_lines = [
 precision = 2
 show_missing = true
 
+[tool.pyright]
+include = ["stagecoachml"]
+typeCheckingMode = "standard"
+
+[tool.pydoclint]
+style = "google"
+arg-type-hints-in-docstring = false
+check-return-types = false
+check-class-attributes = false
+allow-init-docstring = true
+exclude = '\.venv|tests|docs'
+
+[tool.preen]
+# Resolves only once this file is on the default branch; on a feature branch
+# the link check sees a 404 for a file that is right there in the diff.
+link_ignore = ["github.com/finite-sample/stagecoachml/blob/main/CHANGELOG.md"]
+
 [dependency-groups]
 dev = [
-    "jupyterlite-pyodide-kernel>=0.7.0",
+    "ruff>=0.16",
+    "pyright>=1.1.390",
+    "pydoclint>=0.5",
+    "pre-commit>=4",
+    { include-group = "test" },
+]
+test = ["pytest>=8", "pytest-cov>=6"]
+docs = [
+    "sphinx>=8",
+    "py-canon @ git+https://github.com/gojiplus/py-canon@v1",
+    "furo",
+    "myst-parser",
+    "sphinx-copybutton",
+    # Repo-specific: the docs render an executable quickstart notebook
+    # (myst-nb), a sphinx-design button, and an in-browser JupyterLite build.
+    "myst-nb>=1.0.0",
+    "sphinx-design>=0.5.0",
     "jupyterlite-sphinx>=0.22.0",
+    "jupyterlite-pyodide-kernel>=0.7.0",
 ]

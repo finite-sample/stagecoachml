@@ -115,12 +115,10 @@ y = diabetes.frame["target"]
 # Split columns into "early" and "late" features
 features = list(X.columns)
 mid = len(features) // 2
-early_features = features[:mid]   # pretend these arrive early
-late_features  = features[mid:]   # pretend these arrive later
+early_features = features[:mid]  # pretend these arrive early
+late_features = features[mid:]  # pretend these arrive later
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=0
-)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
 
 # Stage-1: fast global model on early features
 stage1 = LinearRegression()
@@ -135,7 +133,7 @@ model = StagecoachRegressor(
     late_features=late_features,
     residual=True,
     use_stage1_pred_as_feature=True,
-    inner_cv=None,            # set >1 to cross-fit stage-1 preds if you care
+    inner_cv=None,  # set >1 to cross-fit stage-1 preds if you care
 )
 
 # Hyper-parameter search over both stages
@@ -169,7 +167,7 @@ y = data.target
 features = list(X.columns)
 mid = len(features) // 2
 early = features[:mid]
-late  = features[mid:]
+late = features[mid:]
 
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=1, stratify=y
@@ -188,8 +186,10 @@ model = StagecoachClassifier(
 
 model.fit(X_train, y_train)
 
+
 def metrics(y_true, y_pred):
     return accuracy_score(y_true, y_pred), f1_score(y_true, y_pred)
+
 
 # Provisional scores from early features only
 stage1_test_proba = model.predict_stage1_proba(X_test)

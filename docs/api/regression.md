@@ -1,12 +1,5 @@
 # Regression API
 
-```{eval-rst}
-.. automodule:: stagecoachml.regression
-   :members:
-   :undoc-members:
-   :show-inheritance:
-```
-
 ## StagecoachRegressor
 
 ```{eval-rst}

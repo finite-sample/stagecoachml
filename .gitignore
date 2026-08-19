@@ -70,6 +70,12 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+_site/
+
+# jupyterlite-sphinx build state and staging directories
+docs/.jupyterlite.doit.db
+docs/_contents/
+docs/.cache/
 
 # PyBuilder
 .pybuilder/
