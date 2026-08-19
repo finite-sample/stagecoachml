@@ -1,12 +1,5 @@
 # Classification API
 
-```{eval-rst}
-.. automodule:: stagecoachml.classification
-   :members:
-   :undoc-members:
-   :show-inheritance:
-```
-
 ## StagecoachClassifier
 
 ```{eval-rst}

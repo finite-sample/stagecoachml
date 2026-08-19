@@ -1,19 +1,34 @@
 """Base classes for StagecoachML estimators."""
 
 from abc import ABC, abstractmethod
+from typing import Any, TypeAlias
 
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator
 
+# Both estimators accept sklearn's usual array-likes; the DataFrame branches
+# exist so `early_features`/`late_features` can be given as column names.
+Matrix: TypeAlias = np.ndarray | pd.DataFrame
+Target: TypeAlias = np.ndarray | pd.Series
+
+# sklearn estimators are structurally typed: `BaseEstimator` declares none of
+# `fit`, `predict`, `predict_proba` or `decision_function`, and `clone` is
+# overloaded across containers so its result widens to a union of them. A type
+# checker cannot narrow either, so the fitted sub-estimators are left dynamic.
+Estimator: TypeAlias = Any
+
 
 class StagecoachBase(BaseEstimator, ABC):
     """Base class for two-stage estimators."""
 
+    stage1_estimator_: Estimator
+    stage2_estimator_: Estimator
+
     def __init__(
         self,
-        stage1_estimator,
-        stage2_estimator,
+        stage1_estimator: BaseEstimator,
+        stage2_estimator: BaseEstimator,
         early_features: list[str] | None = None,
         late_features: list[str] | None = None,
         use_stage1_pred_as_feature: bool = True,
@@ -31,7 +46,7 @@ class StagecoachBase(BaseEstimator, ABC):
         # Cache for stage1 predictions (for latency optimization)
         self._stage1_cache: dict[str, np.ndarray] = {}
 
-    def _validate_features(self, X):
+    def _validate_features(self, X: Matrix) -> None:
         """Validate feature specifications against input data."""
         # Store the original feature names for later use (only during initial fit)
         if not hasattr(self, "feature_names_in_"):
@@ -51,14 +66,16 @@ class StagecoachBase(BaseEstimator, ABC):
             if self.early_features is not None:
                 missing_early = set(self.early_features) - set(available_features)
                 if missing_early:
-                    raise ValueError(f"Early features not found in data: {missing_early}")
+                    raise ValueError(
+                        f"Early features not found in data: {missing_early}"
+                    )
 
             if self.late_features is not None:
                 missing_late = set(self.late_features) - set(available_features)
                 if missing_late:
                     raise ValueError(f"Late features not found in data: {missing_late}")
 
-    def _split_features(self, X):
+    def _split_features(self, X: Matrix) -> tuple[Any, Any]:
         """Split features into early and late groups."""
         if isinstance(X, pd.DataFrame):
             if self.early_features is not None:
@@ -83,7 +100,11 @@ class StagecoachBase(BaseEstimator, ABC):
             # Convert to DataFrame for feature selection, then back to array
             df = pd.DataFrame(X, columns=self.feature_names_in_)
             X_early = df[self.early_features].values
-            X_late = df[self.late_features].values if self.late_features is not None else None
+            X_late = (
+                df[self.late_features].values
+                if self.late_features is not None
+                else None
+            )
 
             if X_late is None:
                 # Use remaining features
@@ -99,24 +120,19 @@ class StagecoachBase(BaseEstimator, ABC):
 
         return X_early, X_late
 
-    def _get_cache_key(self, X_early) -> str:
+    def _get_cache_key(self, X_early: Matrix) -> str:
         """Generate cache key for stage1 predictions."""
         if isinstance(X_early, pd.DataFrame):
             # Use hash of values and index
             return str(hash((X_early.values.tobytes(), str(X_early.index.tolist()))))
-        else:
-            return str(hash(X_early.tobytes()))
+        return str(hash(X_early.tobytes()))
 
-    def set_stage1_cache(self, X_early, predictions: np.ndarray) -> None:
+    def set_stage1_cache(self, X_early: Matrix, predictions: np.ndarray) -> None:
         """Cache stage1 predictions for latency optimization.
 
-        Parameters
-        ----------
-        X_early : array-like
-            Early features used for stage1 prediction
-        predictions : array-like
-            Stage1 predictions to cache
-
+        Args:
+            X_early: Early features used for the stage1 prediction.
+            predictions: Stage1 predictions to cache.
         """
         cache_key = self._get_cache_key(X_early)
         self._stage1_cache[cache_key] = np.asarray(predictions)
@@ -125,17 +141,36 @@ class StagecoachBase(BaseEstimator, ABC):
         """Clear all cached stage1 predictions."""
         self._stage1_cache.clear()
 
-    def _get_cached_stage1_pred(self, X_early) -> np.ndarray | None:
+    def _get_cached_stage1_pred(self, X_early: Matrix) -> np.ndarray | None:
         """Retrieve cached stage1 predictions if available."""
         cache_key = self._get_cache_key(X_early)
         return self._stage1_cache.get(cache_key)
 
     @abstractmethod
-    def fit(self, X, y, sample_weight=None):
-        """Fit the two-stage model."""
-        pass
+    def fit(
+        self,
+        X: Matrix,
+        y: Target,
+        sample_weight: np.ndarray | None = None,
+    ) -> "StagecoachBase":
+        """Fit the two-stage model.
+
+        Args:
+            X: Training data.
+            y: Target values.
+            sample_weight: Per-sample weights, passed to both stages.
+
+        Returns:
+            The fitted estimator.
+        """
 
     @abstractmethod
-    def predict_stage1(self, X):
-        """Make predictions using only early features (stage1)."""
-        pass
+    def predict_stage1(self, X: Matrix) -> np.ndarray:
+        """Make predictions using only early features (stage1).
+
+        Args:
+            X: Input data.
+
+        Returns:
+            Stage1 predictions.
+        """

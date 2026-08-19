@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from sklearn.datasets import make_regression
+from sklearn.exceptions import NotFittedError
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import cross_val_score
 from sklearn.tree import DecisionTreeRegressor
@@ -165,24 +166,27 @@ class TestStagecoachRegressorPrediction:
         X_small = X_df[:10].copy()
         y_small = y[:10]
 
-        from sklearn.linear_model import LinearRegression
-
-        # Test that predictions are conceptually different by testing the actual workflow
+        # Test that predictions are conceptually different by exercising the
+        # actual workflow.
         model_residual = StagecoachRegressor(
             LinearRegression(),
             LinearRegression(),
             residual=True,
-            use_stage1_pred_as_feature=True,  # This is required for meaningful residual learning
+            # Required for meaningful residual learning.
+            use_stage1_pred_as_feature=True,
         )
         model_non_residual = StagecoachRegressor(
-            LinearRegression(), LinearRegression(), residual=False, use_stage1_pred_as_feature=True
+            LinearRegression(),
+            LinearRegression(),
+            residual=False,
+            use_stage1_pred_as_feature=True,
         )
 
         model_residual.fit(X_small, y_small)
         model_non_residual.fit(X_small, y_small)
 
         # The key test: ensure the models learn different behaviors
-        # even if final predictions might be similar due to linearityk
+        # even if final predictions might be similar due to linearity
         # Test on different data to see if models have learned differently
         X_test = X_df[10:15].copy()
 
@@ -193,12 +197,16 @@ class TestStagecoachRegressorPrediction:
         # since they were trained with different targets
         stage1_pred_test = model_residual.predict_stage1(X_test)
         stage2_pred_residual = model_residual.stage2_estimator_.predict(
-            np.column_stack([model_residual._split_features(X_test.values)[1], stage1_pred_test])
+            np.column_stack(
+                [model_residual._split_features(X_test.values)[1], stage1_pred_test]
+            )
         )
 
-        # For residual: final = stage1 + stage2_pred
-        # For non-residual: final = stage2_pred
-        # They should have learned different relationships
+        # For residual: final = stage1 + stage2_pred.
+        # For non-residual: final = stage2_pred.
+        np.testing.assert_allclose(
+            pred_residual, stage1_pred_test + stage2_pred_residual
+        )
         assert isinstance(pred_residual, np.ndarray)
         assert isinstance(pred_non_residual, np.ndarray)
         assert pred_residual.shape == pred_non_residual.shape
@@ -262,7 +270,9 @@ class TestStagecoachRegressorCaching:
 
         # Create a new test dataset for caching
         X_test = X_df[:5].copy()
-        X_early, _ = model._split_features(X_test.values)  # Use array for consistent behavior
+        X_early, _ = model._split_features(
+            X_test.values
+        )  # Use array for consistent behavior
 
         # Cache some predictions
         cached_preds = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
@@ -343,7 +353,7 @@ class TestStagecoachRegressorEdgeCases:
 
         model = StagecoachRegressor(stage1, stage2)
 
-        with pytest.raises(Exception):  # sklearn raises NotFittedError
+        with pytest.raises(NotFittedError):
             model.predict(X_df)
 
     def test_sample_weights(self, regression_data, basic_estimators):

@@ -1,10 +1,8 @@
 # Quick Start Guide
 
-This guide will get you up and running with StagecoachML in just a few minutes.
+This guide gets you running with StagecoachML in a few minutes.
 
 ## Installation
-
-First, install StagecoachML:
 
 ```bash
 # Using pip
@@ -14,95 +12,109 @@ pip install stagecoachml
 uv pip install stagecoachml
 ```
 
-## Your First Pipeline
+## The idea in one paragraph
 
-Let's create a simple ML pipeline that loads data, preprocesses it, and trains a model:
+StagecoachML is for the case where your features do not all arrive at once.
+You nominate some columns as **early** (available immediately) and the rest as
+**late**. A stage-1 estimator is fitted on the early columns alone; a stage-2
+estimator is fitted on the late columns plus, optionally, the stage-1
+prediction. The pair behaves as a single scikit-learn estimator, so you can
+`fit`, cross-validate, and grid-search it the way you would any other — while
+still asking for an early-only score when that is all you can afford.
 
-```python
-from stagecoachml import Pipeline
-from stagecoachml.stage import DataLoaderStage, FunctionStage, ModelStage
-
-# Create a new pipeline
-pipeline = Pipeline(name="my_first_pipeline")
-
-# Stage 1: Load some data
-data_loader = DataLoaderStage(
-    name="load_data",
-    source_type="csv",
-    source_path="data.csv"
-)
-pipeline.add_stage(data_loader)
-
-# Stage 2: Preprocess the data
-def preprocess_data(context):
-    df = context["load_data"]["data"]
-    # Simple preprocessing - drop null values
-    df_clean = df.dropna()
-    return {"clean_data": df_clean}
-
-preprocessor = FunctionStage(
-    name="preprocess",
-    func=preprocess_data
-)
-pipeline.add_stage(preprocessor)
-
-# Stage 3: Train a model
-trainer = ModelStage(
-    name="train_model",
-    model_type="train",
-    model_class="RandomForest"
-)
-pipeline.add_stage(trainer)
-
-# Define the execution order
-pipeline.add_dependency("load_data", "preprocess")
-pipeline.add_dependency("preprocess", "train_model")
-
-# Run the pipeline
-results = pipeline.run()
-
-print("Pipeline completed!")
-print(f"Trained model: {results['train_model']['model']}")
-```
-
-## Understanding the Output
-
-When you run a pipeline, StagecoachML returns a dictionary containing the outputs from each stage:
+## Your first two-stage model
 
 ```python
-{
-    "load_data": {"data": <pandas.DataFrame>},
-    "preprocess": {"clean_data": <pandas.DataFrame>},
-    "train_model": {"model": <sklearn.ensemble.RandomForestClassifier>}
-}
+from sklearn.datasets import load_diabetes
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+from sklearn.model_selection import train_test_split
+
+from stagecoachml import StagecoachRegressor
+
+diabetes = load_diabetes(as_frame=True)
+X = diabetes.frame.drop(columns=["target"])
+y = diabetes.frame["target"]
+
+# Pretend the first half of the columns arrives before the second half.
+features = list(X.columns)
+mid = len(features) // 2
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
+
+model = StagecoachRegressor(
+    stage1_estimator=LinearRegression(),
+    stage2_estimator=RandomForestRegressor(n_estimators=200, random_state=0),
+    early_features=features[:mid],
+    late_features=features[mid:],
+    residual=True,
+    use_stage1_pred_as_feature=True,
+)
+model.fit(X_train, y_train)
+
+print("Stage-1 R2:", r2_score(y_test, model.predict_stage1(X_test)))
+print("Final   R2:", r2_score(y_test, model.predict(X_test)))
 ```
 
-## Visualizing Your Pipeline
+`predict_stage1` uses only the early columns, so it is what you would call at
+the point in a request where the late features do not exist yet. `predict`
+uses both stages.
 
-See the structure of your pipeline:
+## Understanding the output
+
+With `residual=True` and `use_stage1_pred_as_feature=True`, stage 2 is fitted
+on `y - ŷ₁` rather than on `y`, and `predict` returns `ŷ₁ + ŷ₂`. With
+`residual=False`, stage 2 predicts the target directly and `predict` returns
+`ŷ₂` alone. Everything else is unchanged, which makes the two settings
+directly comparable on the same split.
+
+## Classification
+
+`StagecoachClassifier` follows the same shape. Its stage-1 estimator must
+implement `predict_proba` or `decision_function`, and its stage-2 estimator
+must implement `predict_proba`:
 
 ```python
-print(pipeline.visualize())
+from sklearn.datasets import load_breast_cancer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+
+from stagecoachml import StagecoachClassifier
+
+data = load_breast_cancer(as_frame=True)
+features = list(data.data.columns)
+mid = len(features) // 2
+
+model = StagecoachClassifier(
+    stage1_estimator=LogisticRegression(max_iter=1000),
+    stage2_estimator=RandomForestClassifier(n_estimators=200, random_state=0),
+    early_features=features[:mid],
+    late_features=features[mid:],
+)
+model.fit(data.data, data.target)
+
+provisional = model.predict_stage1_proba(data.data)  # early features only
+final = model.predict_proba(data.data)  # both stages
 ```
 
-Output:
+## Guarding against leakage
+
+If the stage-1 prediction is used as a stage-2 feature, fitting stage 2 on
+in-sample stage-1 predictions lets stage 2 learn from stage 1's overfitting.
+Set `inner_cv` to a fold count to have the stage-1 feature generated
+out-of-fold instead:
+
+```python
+model = StagecoachRegressor(
+    stage1_estimator=LinearRegression(),
+    stage2_estimator=RandomForestRegressor(random_state=0),
+    inner_cv=5,
+)
 ```
-Pipeline: my_first_pipeline
-========================================
-Stage: load_data
-  Leads to: preprocess
 
-Stage: preprocess
-  Dependencies: load_data
-  Leads to: train_model
+## Next steps
 
-Stage: train_model
-  Dependencies: preprocess
-```
-
-## Next Steps
-
-- Learn about [different types of stages](user_guide/stages.md)
-- Explore [pipeline configuration](user_guide/configuration.md)
-- Check out [advanced examples](examples/index.md)
-- Read the [API reference](api/index.md)
+- Work through the [examples](examples/index.md)
+- Read the API reference for [`StagecoachRegressor`](api/regression.md) and
+  [`StagecoachClassifier`](api/classification.md)

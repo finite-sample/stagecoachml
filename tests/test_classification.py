@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from sklearn.datasets import make_classification
+from sklearn.exceptions import NotFittedError
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score
 from sklearn.tree import DecisionTreeClassifier
@@ -15,7 +16,12 @@ from stagecoachml import StagecoachClassifier
 def binary_classification_data():
     """Create synthetic binary classification dataset."""
     X, y = make_classification(
-        n_samples=200, n_features=10, n_classes=2, n_redundant=0, n_informative=8, random_state=42
+        n_samples=200,
+        n_features=10,
+        n_classes=2,
+        n_redundant=0,
+        n_informative=8,
+        random_state=42,
     )
     feature_names = [f"feature_{i}" for i in range(10)]
     X_df = pd.DataFrame(X, columns=feature_names)
@@ -26,7 +32,12 @@ def binary_classification_data():
 def multiclass_classification_data():
     """Create synthetic multiclass classification dataset."""
     X, y = make_classification(
-        n_samples=200, n_features=10, n_classes=3, n_redundant=0, n_informative=8, random_state=42
+        n_samples=200,
+        n_features=10,
+        n_classes=3,
+        n_redundant=0,
+        n_informative=8,
+        random_state=42,
     )
     feature_names = [f"feature_{i}" for i in range(10)]
     X_df = pd.DataFrame(X, columns=feature_names)
@@ -96,7 +107,9 @@ class TestStagecoachClassifierBasic:
         assert model.n_features_in_ == X_df.shape[1]
         assert len(model.classes_) == 2
 
-    def test_fit_multiclass_dataframe(self, multiclass_classification_data, basic_classifiers):
+    def test_fit_multiclass_dataframe(
+        self, multiclass_classification_data, basic_classifiers
+    ):
         """Test basic fit functionality with multiclass classification DataFrame."""
         X_df, y, _ = multiclass_classification_data
         stage1, stage2 = basic_classifiers
@@ -138,7 +151,9 @@ class TestStagecoachClassifierPrediction:
         assert predictions.shape == (len(X_df),)
         assert set(predictions).issubset(set(model.classes_))
 
-    def test_predict_stage1_proba_binary(self, binary_classification_data, basic_classifiers):
+    def test_predict_stage1_proba_binary(
+        self, binary_classification_data, basic_classifiers
+    ):
         """Test stage1 probability prediction with binary classification."""
         X_df, y, _ = binary_classification_data
         stage1, stage2 = basic_classifiers
@@ -198,7 +213,9 @@ class TestStagecoachClassifierPrediction:
         assert np.all((probabilities >= 0) & (probabilities <= 1))
         assert np.allclose(probabilities.sum(axis=1), 1.0)
 
-    def test_predict_proba_multiclass(self, multiclass_classification_data, basic_classifiers):
+    def test_predict_proba_multiclass(
+        self, multiclass_classification_data, basic_classifiers
+    ):
         """Test full probability prediction with multiclass classification."""
         X_df, y, _ = multiclass_classification_data
         stage1, stage2 = basic_classifiers
@@ -217,7 +234,9 @@ class TestStagecoachClassifierPrediction:
 class TestStagecoachClassifierFeatures:
     """Feature handling tests."""
 
-    def test_explicit_feature_specification(self, binary_classification_data, basic_classifiers):
+    def test_explicit_feature_specification(
+        self, binary_classification_data, basic_classifiers
+    ):
         """Test with explicitly specified early/late features."""
         X_df, y, _ = binary_classification_data
         stage1, stage2 = basic_classifiers
@@ -234,7 +253,9 @@ class TestStagecoachClassifierFeatures:
         assert isinstance(predictions, np.ndarray)
         assert predictions.shape == (len(X_df),)
 
-    def test_invalid_early_features(self, binary_classification_data, basic_classifiers):
+    def test_invalid_early_features(
+        self, binary_classification_data, basic_classifiers
+    ):
         """Test with invalid early feature names."""
         X_df, y, _ = binary_classification_data
         stage1, stage2 = basic_classifiers
@@ -250,7 +271,9 @@ class TestStagecoachClassifierFeatures:
 class TestStagecoachClassifierCaching:
     """Stage1 prediction caching tests."""
 
-    def test_stage1_cache_functionality_binary(self, binary_classification_data, basic_classifiers):
+    def test_stage1_cache_functionality_binary(
+        self, binary_classification_data, basic_classifiers
+    ):
         """Test stage1 prediction caching for binary classification."""
         X_df, y, _ = binary_classification_data
         stage1, stage2 = basic_classifiers
@@ -296,7 +319,7 @@ class TestStagecoachClassifierCrossValidation:
     def test_cross_val_score_compatibility_binary(
         self, binary_classification_data, basic_classifiers
     ):
-        """Test compatibility with sklearn cross-validation for binary classification."""
+        """Test compatibility with sklearn cross-validation, binary case."""
         X_df, y, _ = binary_classification_data
         stage1, stage2 = basic_classifiers
 
@@ -308,7 +331,9 @@ class TestStagecoachClassifierCrossValidation:
         assert len(scores) == 3
         assert all(isinstance(score, float) for score in scores)
 
-    def test_cross_val_score_with_array_input(self, binary_classification_data, basic_classifiers):
+    def test_cross_val_score_with_array_input(
+        self, binary_classification_data, basic_classifiers
+    ):
         """Test cross-validation with array input."""
         _, y, X = binary_classification_data
         stage1, stage2 = basic_classifiers
@@ -320,7 +345,9 @@ class TestStagecoachClassifierCrossValidation:
         assert len(scores) == 3
         assert all(isinstance(score, float) for score in scores)
 
-    def test_inner_cv_functionality(self, binary_classification_data, basic_classifiers):
+    def test_inner_cv_functionality(
+        self, binary_classification_data, basic_classifiers
+    ):
         """Test inner cross-validation functionality."""
         X_df, y, _ = binary_classification_data
         stage1, stage2 = basic_classifiers
@@ -364,21 +391,25 @@ class TestStagecoachClassifierEstimatorValidation:
 
         model = StagecoachClassifier(stage1, stage2)
 
-        with pytest.raises(ValueError, match="stage2_estimator must implement predict_proba"):
+        with pytest.raises(
+            ValueError, match="stage2_estimator must implement predict_proba"
+        ):
             model.fit(X_df, y)
 
 
 class TestStagecoachClassifierEdgeCases:
     """Edge case and error handling tests."""
 
-    def test_unfitted_estimator_error(self, binary_classification_data, basic_classifiers):
+    def test_unfitted_estimator_error(
+        self, binary_classification_data, basic_classifiers
+    ):
         """Test error when using unfitted estimator."""
         X_df, _, _ = binary_classification_data
         stage1, stage2 = basic_classifiers
 
         model = StagecoachClassifier(stage1, stage2)
 
-        with pytest.raises(Exception):  # sklearn raises NotFittedError
+        with pytest.raises(NotFittedError):
             model.predict(X_df)
 
     def test_sample_weights(self, binary_classification_data, basic_classifiers):
@@ -396,7 +427,9 @@ class TestStagecoachClassifierEdgeCases:
         assert isinstance(predictions, np.ndarray)
         assert predictions.shape == (len(X_df),)
 
-    def test_without_stage1_pred_as_feature(self, binary_classification_data, basic_classifiers):
+    def test_without_stage1_pred_as_feature(
+        self, binary_classification_data, basic_classifiers
+    ):
         """Test mode where stage1 prediction is not used as stage2 feature."""
         X_df, y, _ = binary_classification_data
         stage1, stage2 = basic_classifiers
