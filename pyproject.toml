@@ -103,11 +103,7 @@ docstring-code-format = true
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
-addopts = [
-    "-v",
-    "--tb=short",
-    "--strict-markers"
-]
+addopts = ["-v", "--tb=short", "--strict-markers", "--strict-config", "-ra"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
@@ -119,6 +115,8 @@ filterwarnings = [
     "ignore::PendingDeprecationWarning",
     "ignore::UserWarning"
 ]
+log_level = "INFO"
+xfail_strict = true
 
 [tool.coverage.run]
 branch = true
