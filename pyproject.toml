@@ -7,7 +7,7 @@ name = "stagecoachml"
 version = "0.2.0"
 description = "A library for two-stage machine learning models with staggered feature arrival"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
@@ -34,7 +34,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
@@ -61,7 +60,7 @@ module-root = ""
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py312"
 src = ["stagecoachml", "tests"]
 extend-include = ["*.ipynb"]
 extend-exclude = ["examples/**"]
