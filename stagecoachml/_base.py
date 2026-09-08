@@ -1,7 +1,7 @@
 """Base classes for StagecoachML estimators."""
 
 from abc import ABC, abstractmethod
-from typing import Any, TypeAlias
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -9,14 +9,14 @@ from sklearn.base import BaseEstimator
 
 # Both estimators accept sklearn's usual array-likes; the DataFrame branches
 # exist so `early_features`/`late_features` can be given as column names.
-Matrix: TypeAlias = np.ndarray | pd.DataFrame
-Target: TypeAlias = np.ndarray | pd.Series
+type Matrix = np.ndarray | pd.DataFrame
+type Target = np.ndarray | pd.Series
 
 # sklearn estimators are structurally typed: `BaseEstimator` declares none of
 # `fit`, `predict`, `predict_proba` or `decision_function`, and `clone` is
 # overloaded across containers so its result widens to a union of them. A type
 # checker cannot narrow either, so the fitted sub-estimators are left dynamic.
-Estimator: TypeAlias = Any
+type Estimator = Any
 
 
 class StagecoachBase(BaseEstimator, ABC):
