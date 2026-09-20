@@ -7,12 +7,10 @@ authors:
   - family-names: "Sood"
     given-names: "Gaurav"
     orcid: "https://orcid.org/0000-0002-2536-4498"
-    email: "contact@gsood.com"
 version: "0.2.0"
 date-released: "2025-12-14"
-url: "https://github.com/finite-sample/stagecoachml"
+url: "https://finite-sample.github.io/stagecoachml/"
 repository-code: "https://github.com/finite-sample/stagecoachml"
-documentation: "https://finite-sample.github.io/stagecoachml/"
 license: "MIT"
 keywords:
   - "machine learning"
@@ -33,7 +31,6 @@ preferred-citation:
     - family-names: "Sood"
       given-names: "Gaurav"
       orcid: "https://orcid.org/0000-0002-2536-4498"
-      email: "contact@gsood.com"
   version: "0.1.0"
   url: "https://github.com/finite-sample/stagecoachml"
   year: 2025
