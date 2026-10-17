@@ -78,7 +78,7 @@ convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 # N803/N806: this is a scikit-learn estimator library, and sklearn's API *is*
-# capitalised — `fit(self, X, y)`, `X_early`, `X_late`. Renaming them to satisfy
+# capitalized — `fit(self, X, y)`, `X_early`, `X_late`. Renaming them to satisfy
 # pep8-naming would break the convention every user of the library reads by.
 # PLR0917: an sklearn estimator's hyperparameters must each be an explicit
 # named `__init__` parameter for `get_params`/`clone`/`GridSearchCV` to work,
@@ -182,3 +182,6 @@ docs = [
     "jupyterlite-sphinx>=0.22.0",
     "jupyterlite-pyodide-kernel>=0.7.0",
 ]
+
+[tool.codespell]
+builtin = "clear,rare,en-GB_to_en-US"
