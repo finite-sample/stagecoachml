@@ -1,4 +1,4 @@
-# StagecoachML
+# stagecoachml: two-stage models for features that arrive at different times
 
 [![PyPI - Version](https://img.shields.io/pypi/v/stagecoachml.svg)](https://pypi.org/project/stagecoachml)
 [![Tests](https://github.com/finite-sample/stagecoachml/actions/workflows/ci.yml/badge.svg)](https://github.com/finite-sample/stagecoachml/actions/workflows/ci.yml)
