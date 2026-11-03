@@ -1,336 +1,254 @@
-# stagecoachml: two-stage models for features that arrive at different times
+# stagecoachml: reusable representations for online prediction
 
 [![PyPI - Version](https://img.shields.io/pypi/v/stagecoachml.svg)](https://pypi.org/project/stagecoachml)
 [![Tests](https://github.com/finite-sample/stagecoachml/actions/workflows/ci.yml/badge.svg)](https://github.com/finite-sample/stagecoachml/actions/workflows/ci.yml)
 [![Documentation](https://github.com/finite-sample/stagecoachml/actions/workflows/docs.yml/badge.svg)](https://finite-sample.github.io/stagecoachml/)
 [![Try in Browser](https://img.shields.io/badge/Try%20in%20Browser-JupyterLite-orange)](https://finite-sample.github.io/stagecoachml/lite/lab/index.html?path=quickstart_interactive.ipynb)
-[![PyPI Downloads](https://static.pepy.tech/badge/stagecoachml)](https://pepy.tech/projects/stagecoachml)
 
+**StagecoachML separates reusable upstream computation from online prediction.**
+An encoder prepares a vector from user history, document content, or other reusable
+inputs. An online estimator combines that vector with fresh context and candidate
+features. The pair remains a scikit-learn estimator for training and evaluation.
 
-**StagecoachML** is a tiny library for building two-stage models when your features arrive in two batches at different times.
+```text
+Upstream inputs → encoder → EncodedState ───────┐
+                                              ├→ online estimator → prediction
+Fresh context + candidate features ────────────┘
+```
 
-Think:
+Use it when an expensive representation can be reused across candidates or requests,
+when features arrive at different times, or when the stages run in different
+processes. An upstream probability is one possible representation; vectors preserve
+information that a single score can discard. A user-only score cannot rank different
+items for the same user without candidate information downstream.
 
-- Ad serving and recommendation:  
-  first score on **user + context**, then refine on **creative/item + real-time signals**.
-- Per-customer privacy:  
-  a shared **non-sensitive trunk**, plus a **per-customer head** that uses private fields inside their own environment.
-- Latency-sensitive inference:  
-  run a fast **stage-1** model early in the request, and only run the heavier **stage-2** model when needed.
-
-StagecoachML encodes that pattern directly in the model interface instead of leaving it buried in infra and notebooks.
-
----
-
-## When should you use StagecoachML?
-
-Use StagecoachML when:
-
-- You **can’t wait** for all features before you have to start making decisions.
-- Some features live in a different **silo** (e.g. customer’s infra) and must never
-  hit the central model.
-- You want to **tune and evaluate** the whole two-stage system as a *single* estimator
-  (train/test/CV), while still being able to:
-  - get stage-1 scores from early features, and  
-  - get refined scores once late features arrive.
-
-If you have all your features at once and a single model is fine, this library is
-probably overkill. But if you live with staggered features, StagecoachML keeps the
-logic honest.
-
----
-
-## Core idea
-
-A StagecoachML model splits features into two groups:
-
-- **Early features**: available at stage 1 (e.g. user, context).
-- **Late features**: only available at stage 2 (e.g. ad/creative/item, customer-side data).
-
-You choose:
-
-- a **stage-1 estimator** that sees only early features, and
-- a **stage-2 estimator** that sees late features plus (optionally) the stage-1
-  prediction, and either:
-  - learns to predict the **residual** `y − ŷ₁`, or
-  - learns the final target directly.
-
-At inference time you can:
-
-- call `predict_stage1(...)` / `predict_stage1_proba(...)` when you only have
-  early features; and
-- call `predict(...)` / `predict_proba(...)` later when you have both.
-
-Under the hood, you still train and cross-validate it like any other sklearn estimator.
-
----
-
-## Try it Online
-
-[![Try in Browser](https://img.shields.io/badge/Try%20in%20Browser-JupyterLite-orange)](https://finite-sample.github.io/stagecoachml/lite/lab/index.html?path=quickstart_interactive.ipynb)
-
-Click the badge above to try StagecoachML directly in your browser with interactive examples powered by Pyodide - runs instantly with zero installation!
+The upstream encoder can be larger than the online estimator. Its cost is amortized
+over the predictions that reuse its output. Benefits depend on actual reuse,
+representation quality, freshness, and lookup overhead.
 
 ## Installation
-
-StagecoachML is a pure Python package that depends on NumPy, pandas, and scikit-learn.
 
 ```bash
 pip install stagecoachml
 ```
 
-Or install from source:
+Requires Python 3.12+ and scikit-learn 1.6+. To work from a checkout, use
+`pip install -e .`.
 
-```bash
-git clone https://github.com/finite-sample/stagecoachml.git
-cd stagecoachml
-pip install -e .
-```
+## Prepare once, score many candidates
 
-Import the estimators:
+This small example learns interactions between user preferences and item attributes.
+It uses an identity encoder so the serving boundary is visible without extra training.
 
 ```python
-from stagecoachml import StagecoachRegressor, StagecoachClassifier
-```
-
----
-
-## Quick start
-
-### Regression example (diabetes dataset)
-
-```python
-from stagecoachml import StagecoachRegressor
-from sklearn.datasets import load_diabetes
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.metrics import r2_score
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestRegressor
-
-# Load data as a DataFrame
-diabetes = load_diabetes(as_frame=True)
-X = diabetes.frame.drop(columns=["target"])
-y = diabetes.frame["target"]
-
-# Split columns into "early" and "late" features
-features = list(X.columns)
-mid = len(features) // 2
-early_features = features[:mid]  # pretend these arrive early
-late_features = features[mid:]  # pretend these arrive later
-
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
-
-# Stage-1: fast global model on early features
-stage1 = LinearRegression()
-
-# Stage-2: more flexible model on late features + stage-1 prediction
-stage2 = RandomForestRegressor(n_estimators=200, random_state=0)
-
-model = StagecoachRegressor(
-    stage1_estimator=stage1,
-    stage2_estimator=stage2,
-    early_features=early_features,
-    late_features=late_features,
-    residual=True,
-    use_stage1_pred_as_feature=True,
-    inner_cv=None,  # set >1 to cross-fit stage-1 preds if you care
-)
-
-# Hyper-parameter search over both stages
-param_grid = {
-    "stage1_estimator__fit_intercept": [True, False],
-    "stage2_estimator__max_depth": [None, 5, 10],
-}
-grid = GridSearchCV(model, param_grid, cv=5)
-grid.fit(X_train, y_train)
-
-best = grid.best_estimator_
-
-print("Stage-1 test R²: ", r2_score(y_test, best.predict_stage1(X_test)))
-print("Final   test R²: ", r2_score(y_test, best.predict(X_test)))
-```
-
-### Classification example (breast cancer dataset)
-
-```python
-from stagecoachml import StagecoachClassifier
-from sklearn.datasets import load_breast_cancer
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, f1_score
+import numpy as np
+import pandas as pd
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import FunctionTransformer, PolynomialFeatures
 
-data = load_breast_cancer(as_frame=True)
-X = data.data
-y = data.target
+from stagecoachml import StagecoachClassifier
 
-features = list(X.columns)
-mid = len(features) // 2
-early = features[:mid]
-late = features[mid:]
-
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=1, stratify=y
-)
-
-stage1_clf = LogisticRegression(max_iter=1000)
-stage2_clf = RandomForestClassifier(n_estimators=200, random_state=2)
+rng = np.random.default_rng(7)
+X = pd.DataFrame(rng.normal(size=(1000, 3)), columns=["interest", "item", "fresh"])
+y = (X.interest * X.item + 0.3 * X.fresh > 0).astype(int)
 
 model = StagecoachClassifier(
-    stage1_estimator=stage1_clf,
-    stage2_estimator=stage2_clf,
-    early_features=early,
-    late_features=late,
-    use_stage1_pred_as_feature=True,
+    encoder=FunctionTransformer(),
+    estimator=make_pipeline(
+        PolynomialFeatures(degree=2, include_bias=False),
+        LogisticRegression(),
+    ),
+    upstream_features=["interest"],
+    online_features=["item", "fresh"],
+).fit(X, y)
+
+users = pd.DataFrame({"interest": [-1.0, 1.0]})
+state = model.encode(users, entity_ids=["alice", "bob"], feature_times=1000.0)
+
+candidates = pd.DataFrame({"item": [-1.0, 1.0, 1.0], "fresh": [0.1, 0.1, 0.2]})
+rows = state.rows_for(["alice", "alice", "bob"])
+probabilities = model.predict_proba_from_state(
+    candidates,
+    state,
+    state_indices=rows,
+    as_of=1010.0,
+    max_age=60.0,
 )
-
-model.fit(X_train, y_train)
-
-
-def metrics(y_true, y_pred):
-    return accuracy_score(y_true, y_pred), f1_score(y_true, y_pred)
-
-
-# Provisional scores from early features only
-stage1_test_proba = model.predict_stage1_proba(X_test)
-stage1_acc, stage1_f1 = metrics(y_test, (stage1_test_proba >= 0.5).astype(int))
-
-# Final scores with all features
-final_acc, final_f1 = metrics(y_test, model.predict(X_test))
-
-print("Stage-1  test accuracy/F1:", f"{stage1_acc:.3f}/{stage1_f1:.3f}")
-print("Final    test accuracy/F1:", f"{final_acc:.3f}/{final_f1:.3f}")
 ```
 
----
+`encode` needs only upstream features. `predict_from_state` and
+`predict_proba_from_state` need only online features and prepared state, and never
+execute the encoder. `predict(X)` and `predict_proba(X)` run both stages for ordinary
+scikit-learn evaluation. Named DataFrame columns are reordered to the fitted schema;
+array inputs to the separate stages must already be in the corresponding stage order.
+Selectors are explicit lists of names or integer positions. `online_features=[]` is
+supported. A feature may be routed to both stages when a raw upstream input should
+also be available online.
 
-## API overview
+For a separate serving process, serialize **`model.predictor_`** and the state.
+The predictor contains the fitted online estimator and schema, with no reference to
+the encoder. Its methods are `predict(X_online, state, ...)` and, for classifiers,
+`predict_proba(X_online, state, ...)`. The probability columns follow
+`model.classes_` (also available as `model.predictor_.estimator.classes_`).
 
-### `StagecoachRegressor`
+## Choose a training contract
+
+### Frozen representations
+
+Train an encoder on an earlier or independent dataset, freeze it, then fit the
+online estimator against that fixed representation:
 
 ```python
-StagecoachRegressor(
-    stage1_estimator,
-    stage2_estimator,
-    early_features,
-    late_features,
+from sklearn.decomposition import PCA
+from sklearn.frozen import FrozenEstimator
+from sklearn.linear_model import Ridge
+
+from stagecoachml import StagecoachRegressor
+
+encoder = PCA(n_components=4).fit(X_pretrain[upstream_columns])
+model = StagecoachRegressor(
+    encoder=FrozenEstimator(encoder),
+    estimator=Ridge(),
+    upstream_features=upstream_columns,
+    online_features=online_columns,
+).fit(X_train, y_train)
+```
+
+The variable names in this snippet represent your own disjoint datasets and column
+lists. A complete runnable version is in `examples/classification_example.py`.
+Keep the final evaluation set separate from both encoder and downstream training.
+Freezing an encoder does not undo leakage from how it was originally trained.
+
+### Prediction stacking and residual regression
+
+`PredictionEncoder` turns a predictor into a transformer. Its default method is
+`predict_proba` for classifiers and `predict` for regressors. Explicit
+`method="decision_function"` passes raw margins through without claiming calibration.
+Binary probabilities retain both class columns.
+
+```python
+from sklearn.linear_model import Ridge
+from sklearn.model_selection import TimeSeriesSplit
+
+from stagecoachml import PredictionEncoder, StagecoachRegressor
+
+model = StagecoachRegressor(
+    encoder=PredictionEncoder(Ridge()),
+    estimator=Ridge(),
+    upstream_features=["history"],
+    online_features=["current_signal"],
+    cv=TimeSeriesSplit(n_splits=4),
     residual=True,
-    use_stage1_pred_as_feature=True,
-    inner_cv=None,
-    random_state=None,
 )
 ```
 
-Key points:
+For chronological rows, each downstream training representation comes from a model
+trained on earlier rows. The initial window is excluded from downstream fitting;
+`training_indices_` records the rows actually used. Integer `cv` uses standard
+K-fold/stratified folds and does **not** imply temporal safety. Group splitters accept
+`fit(X, y, groups=...)`. Train/test overlap and repeated test coverage are rejected;
+every classification encoder fold must retain the same classes. Splits must reflect
+your data dependencies: group separation and chronological separation are different
+constraints. Sequence features must also be constructed without future events.
 
-* `stage1_estimator`: any sklearn regressor (`RandomForestRegressor`, `LinearRegression`, etc.).
-* `stage2_estimator`: another regressor for the late features (often more flexible).
-* `early_features` / `late_features`: column names defining feature arrival.
-* `residual=True`: stage 2 learns `y − ŷ₁` and we add it back at prediction time.
-* `use_stage1_pred_as_feature=True`: stage-1 prediction becomes an extra input to stage 2.
-* `inner_cv`: optional K-fold cross-fitting to generate out-of-fold stage-1 predictions for stage-2 training.
+Cross-fitting is restricted to `PredictionEncoder`. Independently fitted latent
+encoders may rotate or permute their coordinates, so their vectors cannot generally
+be pooled into one downstream training matrix. With `cv=None`, components fit on
+the supplied data; supervised encoders can produce optimistic in-sample features.
+The deployment encoder is refitted on all supplied training rows, so evaluate the
+complete fitted pair on a separate holdout.
 
-Methods:
+`sample_weight` is passed to both trainable components, sliced within folds, and
+restricted to the downstream training rows. Components must support that keyword;
+unsupported weights raise an error. Frozen encoders ignore fitting arguments.
 
-* `fit(X, y)`
-* `predict_stage1(X)` – early-only predictions.
-* `predict(X)` – final predictions.
+With `residual=True`, the encoder must return one prediction column. The online
+regressor learns `y - prediction` and serving adds that prediction back. This option
+is independent of feature routing; the representation is always available online.
 
-### `StagecoachClassifier`
+## Representation lifecycle
 
-```python
-StagecoachClassifier(
-    stage1_estimator,
-    stage2_estimator,
-    early_features,
-    late_features,
-    use_stage1_pred_as_feature=True,
-    inner_cv=None,
-    random_state=None,
-)
-```
+`EncodedState` contains a dense numeric matrix, a fitted encoder identifier,
+optional unique entity IDs, and optional feature cutoff timestamps. Timestamps are
+Unix seconds. They describe when the input information was current, not when a
+cache write happened. Arrays are copied and made read-only on construction.
 
-* Stage-1 classifier must implement `predict_proba` or `decision_function`.
-* Stage-2 classifier must implement `predict_proba`.
-* `predict_stage1_proba(X)` returns a provisional probability for the positive class
-  using early features only.
-* `predict_proba(X)` / `predict(X)` use both stages.
+- `state.rows_for(candidate_entity_ids)` preserves candidate order and allows repeats.
+  Integer and string identifiers remain distinct; IDs are not converted to text.
+- Missing entities raise an error; there is no implicit recomputation or zero filling.
+- `as_of` rejects future feature snapshots; `max_age` additionally rejects stale state.
+  Both operate after candidate mapping. Freshness checks require stored timestamps.
+- Every successful model fit creates a new identifier. State from an older fit is
+  rejected by the new predictor; an older predictor/state pair remains usable.
+- Save and deploy matching encoder/predictor versions together. Do not mutate fitted
+  components in place. The identifier checks compatibility, not data provenance.
 
----
+State storage, refresh scheduling, retries, eviction, and fallback models belong to
+application infrastructure. The library supplies an explicit boundary and validation.
 
-## Business-level use cases
+## Evaluation
 
-### 1. Ad serving & recommendation
-
-* **Stage 1 (trunk):**
-  user, session, page/context features. Run for every candidate to
-  do rough scoring / candidate pruning.
-* **Stage 2 (head):**
-  ad/creative/item-side features (embeddings, textual features, sponsorship info),
-  plus stage-1 scores. Run only on the smaller candidate set.
-
-This lets you:
-
-* keep the expensive features and models off the critical path where possible,
-* cross-validate the *whole* two-stage scoring process as one estimator, and
-* reason explicitly about which features are actually available at each stage.
-
-### 2. Per-customer models with private fields
-
-* **Shared trunk:** trained on non-sensitive features across all customers.
-* **Per-customer head (stage 2):** trained only on that customer’s private fields
-  (GDP data, custom risk scores, internal labels) inside their environment.
-
-You can:
-
-* ship the trunk once,
-* let each customer fit their own stage-2 model locally,
-* still evaluate how “global trunk + local head” behaves on held-out data.
-
-### 3. Latency and staged inference
-
-If your system has a front-door budget (say ~10 ms) and a back-end budget per
-selected candidate, StagecoachML gives you a clean way to:
-
-* do rough scoring at T₁ using a small, cheap stage-1 model;
-* hydrate more features or call heavier services; and
-* refine scores at T₂ with stage-2.
-
-Because the whole pipeline is an sklearn estimator, you don’t have to guess whether
-this staging actually helps: you can compare two-stage vs single-stage models on
-the same train/test splits.
-
----
-
-## Examples
-
-The `examples/` directory contains runnable scripts:
-
-* `examples/regression_example.py`
-  Uses the diabetes dataset, splits features into early/late, trains a
-  `StagecoachRegressor`, and compares it to a one-stage baseline.
-
-* `examples/classification_example.py`
-  Uses the breast cancer dataset, trains a `StagecoachClassifier`, and compares
-  provisional vs final predictions and a one-stage logistic baseline.
-
-Run them with:
+Run the examples from a checkout:
 
 ```bash
 python -m examples.regression_example
 python -m examples.classification_example
+python -m examples.inference_latency.latency_benchmark
 ```
 
----
+The temporal benchmark compares online-only prediction, all features computed online,
+a scalar probability bridge, and vector bridges of widths 2, 4, and 8. It evaluates
+fresh, two-day-old, and seven-day-old state. Encoders train on days 0–5, downstream
+models on days 6–19, and evaluation uses days 20–23.
 
-## Design notes & non-goals
+Its JSON output reports log loss, normalized entropy, Brier score, binned calibration
+error, within-request NDCG, p50/p95/p99 request latency, representation bytes, preparation
+time, and reuse count. Encoder call counts are asserted to be zero during prepared
+serving, and fresh prepared predictions must equal combined predictions. Use
+`--users` and `--candidates` to vary the workload. These are synthetic quality results
+and local CPU timings; lookup measurements exclude a remote feature store.
 
-* Treat `Stagecoach*` as **one model** for train/validation/test; don’t hand-tune
-  stages in isolation and then try to glue them.
-* `inner_cv` is an optional extra for robustness, not a replacement for normal
-  cross-validation.
-* This library is *not* a general DAG/workflow engine. If you want full pipeline
-  orchestration (scheduling, retries, monitoring, etc.), you probably want
-  Airflow/Prefect/etc. StagecoachML is about one very specific modeling pattern:
-  staged feature arrival.
+## Scope and architectural background
 
+The separation is motivated by systems such as Meta's
+[multi-stage ads-ranking architecture](https://engineering.fb.com/2026/08/05/ml-applications/from-user-sequences-to-scaling-laws-a-multi-stage-architecture-for-metas-ads-ranking/):
+user representations can be prepared asynchronously and consumed alongside fresh,
+candidate-dependent signals. StagecoachML implements the composition and serving
+contract. It does not implement LLaTTE, tokenization, attention, joint neural training,
+a retrieval cascade, or a feature store. Its benchmarks do not establish scaling laws
+or reproduce Meta's production results.
+
+## Migration from the prediction-only API
+
+This is a breaking redesign; there are no compatibility aliases.
+
+| Previous API | Replacement |
+|---|---|
+| `stage1_estimator=regressor` | `encoder=PredictionEncoder(regressor)` |
+| `stage2_estimator=...` | `estimator=...` |
+| `early_features`, `late_features` | `upstream_features`, `online_features` |
+| `inner_cv` | `cv`, now accepting splitters as well as integers |
+| `predict_stage1`, `predict_stage1_proba` | `encode(X_upstream).values` |
+| `set_stage1_cache`, `clear_stage1_cache` | Store/discard explicit `EncodedState` objects |
+| `use_stage1_pred_as_feature` | Removed; the online estimator always receives the representation |
+| Regression's default residual correction | Set `residual=True` explicitly; default is direct prediction |
+
+Grid-search parameter paths now use `encoder__...` and `estimator__...`; a prediction
+encoder's wrapped model is addressed as `encoder__estimator__...`.
+
+## Development
+
+```bash
+uv sync --group dev --group docs
+uv run pytest --cov --cov-report=term-missing --cov-fail-under=86
+uv run ruff check .
+uv run ruff format --check .
+uv run pyright
+uv run pydoclint stagecoachml
+uv run sphinx-build -W -b html docs _site
+uv build
+```
+
+The documentation includes this README directly. Its browser notebook installs the
+wheel built from the same checkout as the documentation.
