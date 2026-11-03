@@ -1,176 +1,297 @@
-"""Base classes for StagecoachML estimators."""
+"""Composition and input validation for reusable encoders and online estimators."""
 
-from abc import ABC, abstractmethod
-from typing import Any, TypeAlias
+from typing import TYPE_CHECKING, Any, cast
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator
+from sklearn.base import BaseEstimator, clone, is_classifier, is_regressor
+from sklearn.frozen import FrozenEstimator
+from sklearn.utils.multiclass import check_classification_targets
+from sklearn.utils.validation import (
+    check_array,
+    check_is_fitted,
+    check_X_y,
+    validate_data,
+)
 
-# Both estimators accept sklearn's usual array-likes; the DataFrame branches
-# exist so `early_features`/`late_features` can be given as column names.
-Matrix: TypeAlias = np.ndarray | pd.DataFrame
-Target: TypeAlias = np.ndarray | pd.Series
+from ._training import cross_fit, take_rows
+from .encoding import PredictionEncoder, fit_component
+from .serving import OnlinePredictor
+from .state import EncodedState
 
-# sklearn estimators are structurally typed: `BaseEstimator` declares none of
-# `fit`, `predict`, `predict_proba` or `decision_function`, and `clone` is
-# overloaded across containers so its result widens to a union of them. A type
-# checker cannot narrow either, so the fitted sub-estimators are left dynamic.
-Estimator: TypeAlias = Any
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
-class StagecoachBase(BaseEstimator, ABC):
-    """Base class for two-stage estimators."""
+def feature_positions(X: Any, features: Any) -> list[int]:
+    """Resolve explicit names or positions against the training schema."""
+    if not isinstance(features, (list, tuple)):
+        raise ValueError(
+            "Feature selectors must be lists or tuples of names or positions"
+        )
+    if len(set(features)) != len(features):
+        raise ValueError("Feature selectors must not contain duplicates")
+    if not features:
+        return []
+    if all(isinstance(f, str) for f in features):
+        if not isinstance(X, pd.DataFrame):
+            raise ValueError("Named feature selectors require a DataFrame during fit")
+        if not set(features).issubset(X.columns):
+            raise ValueError("Selected features are missing from the input")
+        return X.columns.get_indexer(features).tolist()
+    if all(isinstance(f, int) and not isinstance(f, bool) for f in features):
+        if min(features) < 0 or max(features) >= X.shape[1]:
+            raise ValueError("Feature positions are outside the input columns")
+        return list(features)
+    raise ValueError("Feature selectors must contain only strings or only integers")
 
-    stage1_estimator_: Estimator
-    stage2_estimator_: Estimator
+
+class StagecoachBase(BaseEstimator):
+    """Shared training and encoding implementation."""
+
+    feature_names_in_: np.ndarray
 
     def __init__(
         self,
-        stage1_estimator: BaseEstimator,
-        stage2_estimator: BaseEstimator,
-        early_features: list[str] | None = None,
-        late_features: list[str] | None = None,
-        use_stage1_pred_as_feature: bool = True,
-        inner_cv: int | None = None,
-        random_state: int | None = None,
-    ):
-        self.stage1_estimator = stage1_estimator
-        self.stage2_estimator = stage2_estimator
-        self.early_features = early_features
-        self.late_features = late_features
-        self.use_stage1_pred_as_feature = use_stage1_pred_as_feature
-        self.inner_cv = inner_cv
-        self.random_state = random_state
+        encoder: Any,
+        estimator: Any,
+        *,
+        upstream_features: list[str] | list[int],
+        online_features: list[str] | list[int],
+        cv: Any = None,
+    ) -> None:
+        self.encoder = encoder
+        self.estimator = estimator
+        self.upstream_features = upstream_features
+        self.online_features = online_features
+        self.cv = cv
 
-        # Cache for stage1 predictions (for latency optimization)
-        self._stage1_cache: dict[str, np.ndarray] = {}
+    def _full_input(self, X: Any, *, reset: bool) -> Any:
+        if not isinstance(X, pd.DataFrame):
+            X = cast("Callable[..., np.ndarray]", check_array)(X, dtype=None)
+        elif not X.columns.is_unique:
+            raise ValueError("DataFrame columns must be unique")
+        elif not reset and hasattr(self, "feature_names_in_"):
+            if not set(self.feature_names_in_).issubset(X.columns):
+                raise ValueError(
+                    "Full prediction input is missing fitted feature columns"
+                )
+            X = X.loc[:, self.feature_names_in_]
+        cast("Callable[..., Any]", validate_data)(
+            self, X, reset=reset, dtype=None, skip_check_array=True
+        )
+        return X
 
-    def _validate_features(self, X: Matrix) -> None:
-        """Validate feature specifications against input data."""
-        # Store the original feature names for later use (only during initial fit)
-        if not hasattr(self, "feature_names_in_"):
-            if isinstance(X, pd.DataFrame):
-                self.feature_names_in_ = np.array(X.columns)
-                self.n_features_in_ = X.shape[1]
-            else:
-                self.feature_names_in_ = None
-                self.n_features_in_ = X.shape[1]
-
-        # Only validate if we have a DataFrame and feature names specified
-        if isinstance(X, pd.DataFrame) and (
-            self.early_features is not None or self.late_features is not None
-        ):
-            available_features = list(X.columns)
-
-            if self.early_features is not None:
-                missing_early = set(self.early_features) - set(available_features)
-                if missing_early:
-                    raise ValueError(
-                        f"Early features not found in data: {missing_early}"
-                    )
-
-            if self.late_features is not None:
-                missing_late = set(self.late_features) - set(available_features)
-                if missing_late:
-                    raise ValueError(f"Late features not found in data: {missing_late}")
-
-    def _split_features(self, X: Matrix) -> tuple[Any, Any]:
-        """Split features into early and late groups."""
+    def _split(self, X: Any) -> tuple[Any, Any]:
         if isinstance(X, pd.DataFrame):
-            if self.early_features is not None:
-                X_early = X[self.early_features]
-            else:
-                # Default: use first half of features as early
-                mid = len(X.columns) // 2
-                X_early = X.iloc[:, :mid]
+            return X.iloc[:, self.upstream_positions_], X.iloc[
+                :, self.online_positions_
+            ]
+        return X[:, self.upstream_positions_], X[:, self.online_positions_]
 
-            if self.late_features is not None:
-                X_late = X[self.late_features]
-            else:
-                # Default: use second half of features as late
-                mid = len(X.columns) // 2
-                X_late = X.iloc[:, mid:]
-        # Array input
-        elif (
-            self.early_features is not None
-            and hasattr(self, "feature_names_in_")
-            and self.feature_names_in_ is not None
-        ):
-            # Convert to DataFrame for feature selection, then back to array
-            df = pd.DataFrame(X, columns=self.feature_names_in_)
-            X_early = df[self.early_features].values
-            X_late = (
-                df[self.late_features].values
-                if self.late_features is not None
-                else None
+    def _fit(self, X: Any, y: Any, sample_weight: Any, groups: Any) -> "StagecoachBase":
+        # Invalidate a previous fit before any validation or component training.
+        for name in list(vars(self)):
+            if name.endswith("_"):
+                delattr(self, name)
+        X = self._full_input(X, reset=True)
+        _, y = cast("Callable[..., Any]", check_X_y)(X, y, dtype=None)
+        self._validate_components(y)
+        self.upstream_positions_ = feature_positions(X, self.upstream_features)
+        self.online_positions_ = feature_positions(X, self.online_features)
+        if not self.upstream_positions_:
+            raise ValueError("At least one upstream feature is required")
+        X_upstream, X_online = self._split(X)
+        self.upstream_names_ = (
+            tuple(X_upstream.columns) if isinstance(X_upstream, pd.DataFrame) else None
+        )
+        self.online_names_ = (
+            tuple(X_online.columns) if isinstance(X_online, pd.DataFrame) else None
+        )
+        weights = self._weights(sample_weight, len(y))
+        if groups is not None and np.asarray(groups).shape != (len(y),):
+            raise ValueError("groups must have one entry per training row")
+        if groups is not None and self.cv is None:
+            raise ValueError("groups requires an explicit cv splitter")
+        encoder = fit_component(clone(self.encoder), X_upstream, y, weights)
+        values = self._representations(encoder.transform(X_upstream), len(y))
+        rows = np.arange(len(y))
+        if self.cv is not None:
+            values, rows = cross_fit(
+                self.encoder,
+                X_upstream,
+                y,
+                cv=self.cv,
+                classifier=is_classifier(self),
+                groups=groups,
+                sample_weight=weights,
+                reference=values,
+                classes=getattr(encoder, "classes_", None),
             )
+        target = self._target(y[rows], values)
+        online = check_array(X_online, ensure_min_features=0, dtype="numeric")
+        design = np.column_stack([values, take_rows(online, rows)])
+        estimator = fit_component(
+            clone(self.estimator),
+            design,
+            target,
+            None if weights is None else weights[rows],
+        )
+        if is_classifier(self):
+            if not hasattr(estimator, "predict_proba"):
+                raise ValueError("The online classifier must implement predict_proba")
+            if not np.array_equal(estimator.classes_, np.unique(y)):
+                raise ValueError(
+                    "Held-out training rows must contain every target class"
+                )
+            self.classes_ = np.asarray(estimator.classes_)
+        self.encoder_ = encoder
+        self.estimator_ = estimator
+        self.encoder_id_ = uuid4().hex
+        self.n_encoded_features_ = values.shape[1]
+        self.training_indices_ = rows
+        self.predictor_ = OnlinePredictor(
+            estimator=estimator,
+            encoder_id=self.encoder_id_,
+            n_encoded_features=self.n_encoded_features_,
+            n_online_features=len(self.online_positions_),
+            online_names=self.online_names_,
+            residual=getattr(self, "residual", False),
+        )
+        return self
 
-            if X_late is None:
-                # Use remaining features
-                remaining_features = [
-                    f for f in self.feature_names_in_ if f not in self.early_features
-                ]
-                X_late = df[remaining_features].values
-        else:
-            # Use indices for feature splitting
-            mid = X.shape[1] // 2
-            X_early = X[:, :mid]
-            X_late = X[:, mid:]
+    def _validate_components(self, y: np.ndarray) -> None:
+        if is_classifier(self):
+            check_classification_targets(y)
+            if not is_classifier(self.estimator):
+                raise ValueError("estimator must be a classifier")
+        elif not is_regressor(self.estimator):
+            raise ValueError("estimator must be a regressor")
+        if not hasattr(self.encoder, "transform"):
+            raise ValueError(
+                "encoder must implement fit and transform; "
+                "use PredictionEncoder for scores"
+            )
+        if self.cv is not None and not isinstance(self.encoder, PredictionEncoder):
+            raise ValueError(
+                "Cross-fitting is supported only for PredictionEncoder; "
+                "freeze other encoders"
+            )
+        if self.cv is not None and isinstance(self.encoder.estimator, FrozenEstimator):
+            raise ValueError("A frozen prediction estimator cannot be cross-fitted")
 
-        return X_early, X_late
+    def _target(self, y: np.ndarray, values: np.ndarray) -> np.ndarray:
+        if getattr(self, "residual", False):
+            if values.shape[1] != 1:
+                raise ValueError(
+                    "Residual regression requires a single prediction column"
+                )
+            return y - values[:, 0]
+        return y
 
-    def _get_cache_key(self, X_early: Matrix) -> str:
-        """Generate cache key for stage1 predictions."""
-        if isinstance(X_early, pd.DataFrame):
-            # Use hash of values and index
-            return str(hash((X_early.values.tobytes(), str(X_early.index.tolist()))))
-        return str(hash(X_early.tobytes()))
+    @staticmethod
+    def _weights(sample_weight: Any, size: int) -> np.ndarray | None:
+        if sample_weight is None:
+            return None
+        weights = np.asarray(sample_weight, dtype=float)
+        if weights.shape != (size,) or not np.all(np.isfinite(weights)):
+            raise ValueError(
+                "sample_weight must be finite with one entry per training row"
+            )
+        if np.any(weights < 0) or not np.any(weights > 0):
+            raise ValueError(
+                "sample_weight must be nonnegative with positive total weight"
+            )
+        return weights
 
-    def set_stage1_cache(self, X_early: Matrix, predictions: np.ndarray) -> None:
-        """Cache stage1 predictions for latency optimization.
+    @staticmethod
+    def _representations(values: Any, size: int) -> np.ndarray:
+        values = check_array(values, dtype="numeric")
+        if len(values) != size:
+            raise ValueError("encoder.transform must preserve the number of input rows")
+        return values
 
-        Args:
-            X_early: Early features used for the stage1 prediction.
-            predictions: Stage1 predictions to cache.
-        """
-        cache_key = self._get_cache_key(X_early)
-        self._stage1_cache[cache_key] = np.asarray(predictions)
-
-    def clear_stage1_cache(self) -> None:
-        """Clear all cached stage1 predictions."""
-        self._stage1_cache.clear()
-
-    def _get_cached_stage1_pred(self, X_early: Matrix) -> np.ndarray | None:
-        """Retrieve cached stage1 predictions if available."""
-        cache_key = self._get_cache_key(X_early)
-        return self._stage1_cache.get(cache_key)
-
-    @abstractmethod
-    def fit(
+    def encode(
         self,
-        X: Matrix,
-        y: Target,
-        sample_weight: np.ndarray | None = None,
-    ) -> "StagecoachBase":
-        """Fit the two-stage model.
+        X_upstream: Any,
+        *,
+        entity_ids: Any = None,
+        feature_times: Any = None,
+    ) -> EncodedState:
+        """Prepare reusable state using only upstream inputs.
 
         Args:
-            X: Training data.
-            y: Target values.
-            sample_weight: Per-sample weights, passed to both stages.
+            X_upstream: Upstream columns. DataFrame columns are selected by fitted
+                name; arrays must contain only upstream columns in fitted order.
+            entity_ids: Optional unique identifiers, one per upstream row.
+            feature_times: Optional input cutoff timestamps in Unix seconds.
 
         Returns:
-            The fitted estimator.
-        """
+            Versioned representations for downstream serving.
 
-    @abstractmethod
-    def predict_stage1(self, X: Matrix) -> np.ndarray:
-        """Make predictions using only early features (stage1).
+        Raises:
+            ValueError: If input or representation dimensions differ from training.
+        """
+        check_is_fitted(self, "predictor_")
+        if isinstance(X_upstream, pd.DataFrame) and self.upstream_names_ is not None:
+            if not set(self.upstream_names_).issubset(X_upstream.columns):
+                raise ValueError("Upstream input is missing fitted feature columns")
+            if not X_upstream.columns.is_unique:
+                raise ValueError("DataFrame columns must be unique")
+            X_upstream = X_upstream.loc[:, list(self.upstream_names_)]
+        else:
+            X_upstream = cast("Callable[..., np.ndarray]", check_array)(
+                X_upstream, dtype=None
+            )
+            if X_upstream.shape[1] != len(self.upstream_positions_):
+                raise ValueError("Upstream input width differs from the fitted schema")
+            if self.upstream_names_ is not None:
+                X_upstream = pd.DataFrame(
+                    X_upstream, columns=pd.Index(self.upstream_names_)
+                )
+        values = self._representations(
+            self.encoder_.transform(X_upstream), len(X_upstream)
+        )
+        if values.shape[1] != self.n_encoded_features_:
+            raise ValueError("Encoder output width changed after fitting")
+        return EncodedState(values, self.encoder_id_, entity_ids, feature_times)
+
+    def predict_from_state(
+        self,
+        X_online: Any,
+        state: EncodedState,
+        *,
+        state_indices: Any = None,
+        as_of: Any = None,
+        max_age: float | None = None,
+    ) -> np.ndarray:
+        """Predict using prepared state without executing or accessing the encoder.
 
         Args:
-            X: Input data.
+            X_online: Online features only, one row per candidate.
+            state: Representations produced by this fitted model.
+            state_indices: Representation row per candidate; defaults to row alignment.
+            as_of: Optional request timestamps in Unix seconds.
+            max_age: Optional maximum feature age in seconds.
 
         Returns:
-            Stage1 predictions.
+            Final predictions, one per candidate.
         """
+        check_is_fitted(self, "predictor_")
+        return self.predictor_.predict(
+            X_online, state, state_indices=state_indices, as_of=as_of, max_age=max_age
+        )
+
+    def predict(self, X: Any) -> np.ndarray:
+        """Run both stages for ordinary scikit-learn evaluation.
+
+        Args:
+            X: Full feature matrix with the fitted training schema.
+
+        Returns:
+            Final predictions, one per input row.
+        """
+        check_is_fitted(self, "predictor_")
+        X_upstream, X_online = self._split(self._full_input(X, reset=False))
+        return self.predict_from_state(X_online, self.encode(X_upstream))

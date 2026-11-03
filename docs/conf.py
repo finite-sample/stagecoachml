@@ -1,5 +1,9 @@
 """Sphinx configuration — fleet standard via py-canon, plus this repo's extras."""
 
+import shutil
+import subprocess
+from pathlib import Path
+
 from py_canon.sphinx import configure
 
 configure(globals())
@@ -82,3 +86,26 @@ jupyterlite_config = "jupyter_lite_config.json"
 # ?path=quickstart_interactive.ipynb links already published on PyPI.
 jupyterlite_contents = ["notebooks/quickstart_interactive.ipynb"]
 jupyterlite_bind_ipynb_suffix = False
+
+
+def build_browser_wheel(app):
+    """Bundle the checkout's wheel so the notebook uses the documented API."""
+    if app.builder.format != "html":
+        return
+    wheel_dir = Path(app.srcdir) / "pypi"
+    wheel_dir.mkdir(exist_ok=True)
+    for wheel in wheel_dir.glob("stagecoachml-*.whl"):
+        wheel.unlink()
+    uv = shutil.which("uv")
+    if uv is None:
+        raise RuntimeError("Building the browser example requires uv")
+    # The executable and build arguments are fixed; Sphinx supplies the source path.
+    subprocess.run(  # noqa: S603
+        [uv, "build", "--wheel", "--out-dir", str(wheel_dir)],
+        cwd=Path(app.srcdir).parent,
+        check=True,
+    )
+
+
+def setup(app):
+    app.connect("builder-inited", build_browser_wheel, priority=100)

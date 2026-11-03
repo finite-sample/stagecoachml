@@ -13,6 +13,34 @@ versions shipped.
 
 ## [Unreleased]
 
+### Added
+
+- Explicit `EncodedState` with entity mappings, fitted encoder identifiers, and
+  optional feature cutoff times and freshness checks.
+- `PredictionEncoder`, vector transformer support, frozen encoder training, and an
+  encoder-free `OnlinePredictor` artifact at `model.predictor_`.
+- Independent `encode`, `predict_from_state`, and `predict_proba_from_state` APIs.
+- Grouped and forward-only prediction cross-fitting, with consistent sample weights
+  and explicit exclusion of rows never held out by a splitter.
+- A synthetic temporal candidate-scoring benchmark covering representation width,
+  staleness, quality, preparation cost, and request latency.
+
+### Maintenance
+
+- Updated audited development/documentation dependency pins and aligned citation
+  version metadata with the published release. CI now includes Python 3.11.
+- Browser documentation bundles the checkout wheel for its executable notebook.
+
+### Breaking changes
+
+- Estimators now take `encoder`, `estimator`, `upstream_features`, `online_features`,
+  and optional `cv`. Automatic half-column splitting is removed.
+- The stage-1 prediction methods and implicit batch cache are replaced by explicit
+  prepared state. Regression now defaults to direct prediction; residual learning
+  must be enabled explicitly.
+- Requires scikit-learn 1.6 or newer for frozen encoder support.
+
+
 ### Changed
 
 - Adopted the py-canon fleet standard: reusable CI, docs and release
