@@ -1,13 +1,13 @@
 [build-system]
-requires = ["uv_build>=0.12.5,<0.13"]
+requires = ["uv_build>=0.12.5,<0.14"]
 build-backend = "uv_build"
 
 [project]
 name = "stagecoachml"
-version = "0.2.0"
+version = "0.3.0"
 description = "Reusable upstream representations and independent online prediction for scikit-learn"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
@@ -34,7 +34,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
@@ -61,7 +60,7 @@ module-root = ""
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py312"
 src = ["stagecoachml", "tests"]
 extend-include = ["*.ipynb"]
 extend-exclude = ["examples/**"]
@@ -103,15 +102,7 @@ docstring-code-format = true
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
-log_level = "INFO"
-xfail_strict = true
-addopts = [
-    "-v",
-    "--tb=short",
-    "--strict-markers",
-    "--strict-config",
-    "-ra"
-]
+addopts = ["-v", "--tb=short", "--strict-markers", "--strict-config", "-ra"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
@@ -123,6 +114,8 @@ filterwarnings = [
     "ignore::PendingDeprecationWarning",
     "ignore::UserWarning"
 ]
+log_level = "INFO"
+xfail_strict = true
 
 [tool.coverage.run]
 branch = true

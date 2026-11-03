@@ -13,6 +13,8 @@ versions shipped.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-03
+
 ### Added
 
 - Explicit `EncodedState` with entity mappings, fitted encoder identifiers, and
@@ -28,7 +30,7 @@ versions shipped.
 ### Maintenance
 
 - Updated audited development/documentation dependency pins and aligned citation
-  version metadata with the published release. CI now includes Python 3.11.
+  version metadata with the published release. CI covers Python 3.12 and 3.14.
 - Browser documentation bundles the checkout wheel for its executable notebook.
 
 ### Breaking changes
@@ -48,14 +50,11 @@ versions shipped.
   configuration.
 - Estimator docstrings converted from NumPy to Google style, and public
   methods given type hints.
-- `predict`/`fit` on both estimators now assemble the stage-2 design matrix
-  through one shared helper instead of two copies of the same branching.
 
 ### Fixed
 
 - The quickstart and examples pages documented a `Pipeline`/`Stage` API that
   the package does not have; both now describe the real estimators.
-- `check_consistent_length_features` no longer takes an unused `X` argument.
 
 ### Removed
 
@@ -115,7 +114,8 @@ No 0.1.1 was published; the version went 0.1.0 to 0.1.2.
   memory use.
 - Regression and classification examples, and a latency benchmark.
 
-[Unreleased]: https://github.com/finite-sample/stagecoachml/compare/v0.2.0...main
+[Unreleased]: https://github.com/finite-sample/stagecoachml/compare/v0.3.0...main
+[0.3.0]: https://github.com/finite-sample/stagecoachml/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/finite-sample/stagecoachml/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/finite-sample/stagecoachml/compare/v0.1.0...v0.1.2
 [0.1.0]: https://github.com/finite-sample/stagecoachml/releases/tag/v0.1.0

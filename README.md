@@ -1,4 +1,4 @@
-# StagecoachML
+# stagecoachml: reusable representations for online prediction
 
 [![PyPI - Version](https://img.shields.io/pypi/v/stagecoachml.svg)](https://pypi.org/project/stagecoachml)
 [![Tests](https://github.com/finite-sample/stagecoachml/actions/workflows/ci.yml/badge.svg)](https://github.com/finite-sample/stagecoachml/actions/workflows/ci.yml)
@@ -28,14 +28,12 @@ representation quality, freshness, and lookup overhead.
 
 ## Installation
 
-The API below is the unreleased redesign. Install the checkout to use it:
-
 ```bash
-pip install -e .
+pip install stagecoachml
 ```
 
-The latest published release is available through `pip install stagecoachml`; its
-API may differ. This checkout requires Python 3.11+ and scikit-learn 1.6+.
+Requires Python 3.12+ and scikit-learn 1.6+. To work from a checkout, use
+`pip install -e .`.
 
 ## Prepare once, score many candidates
 

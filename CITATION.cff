@@ -1,36 +1,31 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 type: software
-title: "StagecoachML: Machine Learning Pipeline Orchestration Framework"
-abstract: "A powerful and intuitive machine learning pipeline orchestration framework that makes building, managing, and deploying ML workflows as easy as riding a stagecoach."
+title: "StagecoachML: Reusable Representations for Online Prediction"
+abstract: "A scikit-learn library that separates reusable upstream representations from online prediction with fresh context and candidate features."
 authors:
   - family-names: "Sood"
     given-names: "Gaurav"
     orcid: "https://orcid.org/0000-0002-2536-4498"
-version: "0.2.0"
-date-released: "2025-12-14"
+version: "0.3.0"
+date-released: "2026-11-03"
 url: "https://finite-sample.github.io/stagecoachml/"
 repository-code: "https://github.com/finite-sample/stagecoachml"
 license: "MIT"
 keywords:
   - "machine learning"
-  - "ml pipeline"
-  - "data science"
-  - "orchestration"
-  - "workflow"
-  - "automation"
-  - "model training"
-  - "feature engineering"
-  - "dag"
-  - "etl"
+  - "representation learning"
+  - "online prediction"
+  - "scikit-learn"
+  - "cross-fitting"
   - "python"
 preferred-citation:
   type: software
-  title: "StagecoachML: Machine Learning Pipeline Orchestration Framework"
+  title: "StagecoachML: Reusable Representations for Online Prediction"
   authors:
     - family-names: "Sood"
       given-names: "Gaurav"
       orcid: "https://orcid.org/0000-0002-2536-4498"
-  version: "0.2.0"
+  version: "0.3.0"
   url: "https://github.com/finite-sample/stagecoachml"
-  year: 2025
+  year: 2026
