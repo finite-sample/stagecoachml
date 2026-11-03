@@ -142,3 +142,10 @@ def test_frozen_predictor_cannot_claim_cross_fitting(data):
     model.encoder = PredictionEncoder(FrozenEstimator(predictor))
     with pytest.raises(ValueError, match="frozen prediction"):
         model.fit(X, y)
+
+
+@pytest.mark.parametrize("residual", ["False", 0.5, 1, None])
+def test_residual_requires_boolean(data, residual):
+    X, y = data
+    with pytest.raises(ValueError, match="residual must be a boolean"):
+        model_for(residual=residual).fit(X, y)

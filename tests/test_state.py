@@ -75,3 +75,20 @@ def test_freshness_is_checked_after_candidate_mapping():
         EncodedState(np.ones((2, 3)), "a").select([0], as_of=10)
     scalar = EncodedState(np.ones((2, 3)), "a", feature_times=10)
     np.testing.assert_array_equal(scalar.feature_times, [10, 10])
+
+
+@pytest.mark.parametrize("as_array", [False, True])
+def test_entity_identifiers_preserve_types(as_array):
+    identifiers = [1, "1"]
+    if as_array:
+        identifiers = np.array(identifiers, dtype=object)
+    state = EncodedState(np.array([[10.0], [20.0]]), "encoder", identifiers)
+    rows = state.rows_for(["1", 1, "1"])
+    np.testing.assert_array_equal(rows, [1, 0, 1])
+    np.testing.assert_array_equal(state.select(rows)[:, 0], [20, 10, 20])
+
+
+def test_entity_lookup_does_not_coerce_unknown_identifier():
+    state = EncodedState(np.ones((2, 1)), "encoder", [1, "two"])
+    with pytest.raises(ValueError, match="No representation"):
+        state.rows_for(["1"])

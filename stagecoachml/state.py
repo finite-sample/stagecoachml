@@ -57,7 +57,7 @@ class EncodedState:
         values.setflags(write=False)
         object.__setattr__(self, "values", values)
         if self.entity_ids is not None:
-            ids = np.asarray(self.entity_ids).copy()
+            ids = np.asarray(self.entity_ids, dtype=object).copy()
             if ids.shape != (len(values),):
                 raise ValueError("entity_ids must have one entry per representation")
             index = pd.Index(ids)
@@ -84,7 +84,7 @@ class EncodedState:
         """
         if self.entity_ids is None:
             raise ValueError("State has no entity_ids")
-        requested = np.asarray(entity_ids)
+        requested = np.asarray(entity_ids, dtype=object)
         if requested.ndim != 1 or requested.size == 0:
             raise ValueError("Requested entity_ids must be a nonempty vector")
         indices = pd.Index(self.entity_ids).get_indexer(requested)

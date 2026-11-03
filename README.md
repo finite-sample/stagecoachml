@@ -175,6 +175,7 @@ Unix seconds. They describe when the input information was current, not when a
 cache write happened. Arrays are copied and made read-only on construction.
 
 - `state.rows_for(candidate_entity_ids)` preserves candidate order and allows repeats.
+  Integer and string identifiers remain distinct; IDs are not converted to text.
 - Missing entities raise an error; there is no implicit recomputation or zero filling.
 - `as_of` rejects future feature snapshots; `max_age` additionally rejects stale state.
   Both operate after candidate mapping. Freshness checks require stored timestamps.

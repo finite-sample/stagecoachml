@@ -11,9 +11,9 @@ Entries for 0.1.0 and 0.1.2, and the description of 0.2.0, were reconstructed
 from the diffs between the released commits; there was no changelog while those
 versions shipped.
 
-## [Unreleased]
+## Unreleased
 
-## [0.3.0] - 2026-11-03
+## 0.3.0 - 2026-11-03
 
 ### Added
 
@@ -42,7 +42,6 @@ versions shipped.
   must be enabled explicitly.
 - Requires scikit-learn 1.6 or newer for frozen encoder support.
 
-
 ### Changed
 
 - Adopted the py-canon fleet standard: reusable CI, docs and release
@@ -53,6 +52,10 @@ versions shipped.
 
 ### Fixed
 
+- Reorder integer-labeled DataFrames using their fitted schema during full prediction.
+- Reject nonboolean residual settings before training.
+- Entity identifiers retain their original types during state creation and lookup,
+  preventing integer and string IDs from silently selecting the same representation.
 - The quickstart and examples pages documented a `Pipeline`/`Stage` API that
   the package does not have; both now describe the real estimators.
 
@@ -114,8 +117,6 @@ No 0.1.1 was published; the version went 0.1.0 to 0.1.2.
   memory use.
 - Regression and classification examples, and a latency benchmark.
 
-[Unreleased]: https://github.com/finite-sample/stagecoachml/compare/v0.3.0...main
-[0.3.0]: https://github.com/finite-sample/stagecoachml/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/finite-sample/stagecoachml/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/finite-sample/stagecoachml/compare/v0.1.0...v0.1.2
 [0.1.0]: https://github.com/finite-sample/stagecoachml/releases/tag/v0.1.0

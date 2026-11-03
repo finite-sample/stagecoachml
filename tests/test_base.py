@@ -282,3 +282,26 @@ def test_categorical_upstream_pipeline(data):
     np.testing.assert_allclose(
         model.predict_from_state(X[["item", "fresh"]], state), model.predict(X)
     )
+
+
+@pytest.mark.parametrize("classifier", [False, True])
+def test_integer_named_columns_reordered_at_prediction(data, classifier):
+    X, y = data
+    X = X.copy()
+    X.columns = [10, 20, 30, 40]
+    cls = StagecoachClassifier if classifier else StagecoachRegressor
+    estimator = LogisticRegression() if classifier else LinearRegression()
+    model = cls(
+        StandardScaler(),
+        estimator,
+        upstream_features=[0, 1],
+        online_features=[2, 3],
+    ).fit(X, y > 0 if classifier else y)
+    reordered = X[[40, 20, 10, 30]]
+    np.testing.assert_allclose(model.predict(reordered), model.predict(X))
+    if classifier:
+        np.testing.assert_allclose(
+            model.predict_proba(reordered), model.predict_proba(X)
+        )
+    with pytest.raises(ValueError, match="missing fitted feature columns"):
+        model.predict(X[[10, 20, 30]])

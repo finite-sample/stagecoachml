@@ -72,15 +72,19 @@ class StagecoachBase(BaseEstimator):
             X = cast("Callable[..., np.ndarray]", check_array)(X, dtype=None)
         elif not X.columns.is_unique:
             raise ValueError("DataFrame columns must be unique")
-        elif not reset and hasattr(self, "feature_names_in_"):
-            if not set(self.feature_names_in_).issubset(X.columns):
+        elif not reset and self.input_columns_ is not None:
+            if not set(self.input_columns_).issubset(X.columns):
                 raise ValueError(
                     "Full prediction input is missing fitted feature columns"
                 )
-            X = X.loc[:, self.feature_names_in_]
+            X = X.loc[:, list(self.input_columns_)]
         cast("Callable[..., Any]", validate_data)(
             self, X, reset=reset, dtype=None, skip_check_array=True
         )
+        if reset:
+            self.input_columns_ = (
+                tuple(X.columns) if isinstance(X, pd.DataFrame) else None
+            )
         return X
 
     def _split(self, X: Any) -> tuple[Any, Any]:
@@ -162,6 +166,8 @@ class StagecoachBase(BaseEstimator):
         return self
 
     def _validate_components(self, y: np.ndarray) -> None:
+        if not isinstance(getattr(self, "residual", False), (bool, np.bool_)):
+            raise ValueError("residual must be a boolean")
         if is_classifier(self):
             check_classification_targets(y)
             if not is_classifier(self.estimator):
