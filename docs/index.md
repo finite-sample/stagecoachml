@@ -37,6 +37,7 @@ examples/index
 
 api/regression
 api/classification
+api/representations
 ```
 
 ## Indices and tables

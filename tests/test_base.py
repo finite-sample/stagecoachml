@@ -1,350 +1,307 @@
-"""Tests for base classes and utilities."""
+"""Serving contracts, schemas, state lifecycle and sklearn composition."""
 
+from unittest.mock import patch
+
+import joblib
 import numpy as np
-import pandas as pd
 import pytest
+from sklearn.base import clone, is_classifier, is_regressor
+from sklearn.decomposition import PCA
+from sklearn.exceptions import NotFittedError
+from sklearn.frozen import FrozenEstimator
 from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.model_selection import GridSearchCV, cross_val_score
+from sklearn.preprocessing import FunctionTransformer, StandardScaler
 
-from stagecoachml._base import StagecoachBase
-from stagecoachml._validation import (
-    check_consistent_length_features,
-    validate_cv_parameter,
-    validate_estimator,
+from stagecoachml import EncodedState, StagecoachClassifier, StagecoachRegressor
+
+
+def make_model(classifier=False, **kwargs):
+    cls = StagecoachClassifier if classifier else StagecoachRegressor
+    estimator = LogisticRegression() if classifier else LinearRegression()
+    return cls(
+        FunctionTransformer(),
+        estimator,
+        upstream_features=["u", "v"],
+        online_features=["item", "fresh"],
+        **kwargs,
+    )
+
+
+@pytest.mark.parametrize("classifier", [False, True])
+def test_independent_serving_and_candidate_mapping(data, classifier):
+    X, y = data
+    model = make_model(classifier).fit(X, y > 0 if classifier else y)
+    upstream = X.iloc[:3][["u", "v"]]
+    state = model.encode(upstream, entity_ids=np.array([30, 10, 20]))
+    indices = state.rows_for([20, 30, 20, 10])
+    online = X.iloc[6:10][["item", "fresh"]]
+    combined = online.copy()
+    combined[["u", "v"]] = upstream.to_numpy()[indices]
+    expected = model.predict(combined)
+    with patch.object(
+        model.encoder_, "transform", side_effect=AssertionError("upstream called")
+    ):
+        np.testing.assert_allclose(
+            model.predict_from_state(online, state, state_indices=indices), expected
+        )
+        np.testing.assert_allclose(
+            model.predictor_.predict(online, state, state_indices=indices), expected
+        )
+        if classifier:
+            proba = model.predict_proba_from_state(online, state, state_indices=indices)
+            assert proba.shape == (4, 2)
+            np.testing.assert_allclose(proba.sum(axis=1), 1)
+
+
+@pytest.mark.parametrize("classifier", [False, True])
+def test_sklearn_clone_search_and_scoring(data, classifier):
+    X, y = data
+    model = make_model(classifier)
+    target = (y > 0).astype(int) if classifier else y
+    assert is_classifier(model) == classifier
+    assert is_regressor(model) != classifier
+    assert not hasattr(clone(model), "predictor_")
+    search = GridSearchCV(model, {"estimator__fit_intercept": [True, False]}, cv=3).fit(
+        X, target
+    )
+    assert np.isfinite(search.best_score_)
+    assert np.all(np.isfinite(cross_val_score(search.best_estimator_, X, target, cv=3)))
+
+
+def test_frozen_encoder_preserves_coordinates(data):
+    X, y = data
+    encoder = PCA(n_components=1).fit(X.iloc[:30][["u", "v"]])
+    components = encoder.components_.copy()
+    model = StagecoachRegressor(
+        FrozenEstimator(encoder),
+        LinearRegression(),
+        upstream_features=["u", "v"],
+        online_features=["item", "fresh"],
+    )
+    with patch.object(
+        encoder, "fit", side_effect=AssertionError("frozen encoder refitted")
+    ):
+        model.fit(X.iloc[30:], y[30:])
+    np.testing.assert_array_equal(encoder.components_, components)
+    np.testing.assert_allclose(
+        model.encode(X[["u", "v"]]).values, encoder.transform(X[["u", "v"]])
+    )
+
+
+def test_serialize_online_artifact_without_encoder(data, tmp_path):
+    X, y = data
+    model = make_model().fit(X, y)
+    state = model.encode(X[["u", "v"]])
+    expected = model.predict(X)
+    path = tmp_path / "online.joblib"
+    joblib.dump((model.predictor_, state), path)
+    predictor, restored_state = joblib.load(path)
+    assert not hasattr(predictor, "encoder")
+    np.testing.assert_allclose(
+        predictor.predict(X[["item", "fresh"]], restored_state), expected
+    )
+    assert not hasattr(predictor, "predict_proba")
+
+
+def test_refit_invalidates_state_but_old_deployment_remains_valid(data):
+    X, y = data
+    model = make_model().fit(X, y)
+    state = model.encode(X[["u", "v"]])
+    old_predictor = model.predictor_
+    expected = model.predict(X)
+    model.fit(X, y + 10)
+    with pytest.raises(ValueError, match="different encoder fit"):
+        model.predict_from_state(X[["item", "fresh"]], state)
+    np.testing.assert_allclose(
+        old_predictor.predict(X[["item", "fresh"]], state), expected
+    )
+
+
+def test_failed_refit_cannot_serve_old_estimator(data):
+    X, y = data
+    model = make_model().fit(X, y)
+    with pytest.raises(ValueError, match="inconsistent numbers"):
+        model.fit(X, y[:-1])
+    with pytest.raises(NotFittedError):
+        model.predict(X)
+
+
+def test_column_order_and_arrays(data):
+    X, y = data
+    model = make_model().fit(X, y)
+    expected = model.predict(X)
+    np.testing.assert_allclose(model.predict(X[X.columns[::-1]]), expected)
+    state = model.encode(X[["v", "u"]])
+    np.testing.assert_allclose(
+        model.predict_from_state(X[["fresh", "item"]], state), expected
+    )
+    state_array = model.encode(X[["u", "v"]].to_numpy())
+    np.testing.assert_allclose(
+        model.predict_from_state(X[["item", "fresh"]].to_numpy(), state_array), expected
+    )
+    positional = StagecoachRegressor(
+        StandardScaler(),
+        LinearRegression(),
+        upstream_features=[0, 1],
+        online_features=[2, 3],
+    ).fit(X.to_numpy(), y)
+    np.testing.assert_allclose(positional.predict(X.to_numpy()), expected, atol=1e-12)
+
+
+def test_no_online_features(data):
+    X, y = data
+    model = StagecoachRegressor(
+        FunctionTransformer(),
+        LinearRegression(),
+        upstream_features=[0, 1, 2, 3],
+        online_features=[],
+    ).fit(X.to_numpy(), y)
+    state = model.encode(X.to_numpy())
+    np.testing.assert_allclose(
+        model.predict_from_state(np.empty((len(X), 0)), state),
+        model.predict(X.to_numpy()),
+    )
+
+
+@pytest.mark.parametrize(
+    ("upstream", "online", "message"),
+    [
+        ([], ["item"], "At least one"),
+        (["missing"], ["item"], "missing"),
+        (["u", "u"], ["item"], "duplicates"),
+        (["u", 1], ["item"], "only strings"),
+        ([-1], ["item"], "outside"),
+        ([False], ["item"], "only strings"),
+        ("u", ["item"], "lists or tuples"),
+    ],
 )
+def test_invalid_feature_selectors(data, upstream, online, message):
+    X, y = data
+    model = StagecoachRegressor(
+        FunctionTransformer(),
+        LinearRegression(),
+        upstream_features=upstream,
+        online_features=online,
+    )
+    with pytest.raises(ValueError, match=message):
+        model.fit(X, y)
 
 
-class MockStagecoachEstimator(StagecoachBase):
-    """Mock implementation for testing base functionality."""
-
-    def fit(self, X, y, sample_weight=None):
-        self._validate_features(X)
-        self.is_fitted_ = True
-        return self
-
-    def predict_stage1(self, X):
-        X_early, _ = self._split_features(X)
-        return np.ones(len(X_early))
-
-
-@pytest.fixture
-def sample_data():
-    """Create sample data for testing."""
-    data = {
-        "early_1": [1, 2, 3, 4, 5],
-        "early_2": [2, 4, 6, 8, 10],
-        "late_1": [3, 6, 9, 12, 15],
-        "late_2": [4, 8, 12, 16, 20],
-    }
-    df = pd.DataFrame(data)
-    array = df.values
-    y = np.array([1, 2, 3, 4, 5])
-    return df, array, y
+def test_schema_failures(data):
+    X, y = data
+    model = make_model().fit(X, y)
+    state = model.encode(X[["u", "v"]])
+    for bad in [X[["u"]], X[["u", "v", "u"]]]:
+        with pytest.raises(ValueError, match=r"missing|unique"):
+            model.encode(bad)
+    with pytest.raises(ValueError, match="width"):
+        model.encode(X.to_numpy())
+    with pytest.raises(ValueError, match="missing"):
+        model.predict(X[["u", "v"]])
+    with pytest.raises(ValueError, match="missing"):
+        model.predict_from_state(X[["item"]], state)
+    with pytest.raises(ValueError, match="width"):
+        model.predict_from_state(X.to_numpy(), state)
+    with pytest.raises(ValueError, match="unique"):
+        model.predict_from_state(X[["item", "fresh", "item"]], state)
+    with pytest.raises(ValueError, match="unique"):
+        make_model().fit(X[["u", "v", "item", "item"]], y)
+    with pytest.raises(ValueError, match="Named feature"):
+        make_model().fit(X.to_numpy(), y)
 
 
-class TestStagecoachBase:
-    """Tests for StagecoachBase class."""
+def test_encoder_contract_failures(data):
+    X, y = data
+    model = make_model()
+    model.encoder = LinearRegression()
+    with pytest.raises(ValueError, match="PredictionEncoder"):
+        model.fit(X, y)
+    model.encoder = FunctionTransformer()
+    model.cv = 3
+    with pytest.raises(ValueError, match="freeze other encoders"):
+        model.fit(X, y)
+    model.cv = None
+    model.fit(X, y)
+    with (
+        patch.object(model.encoder_, "transform", return_value=np.ones((len(X), 3))),
+        pytest.raises(ValueError, match="width changed"),
+    ):
+        model.encode(X[["u", "v"]])
+    with (
+        patch.object(model.encoder_, "transform", return_value=np.ones((1, 2))),
+        pytest.raises(ValueError, match="number of input rows"),
+    ):
+        model.encode(X[["u", "v"]])
 
-    def test_init_default_parameters(self):
-        """Test initialization with default parameters."""
-        stage1 = LinearRegression()
-        stage2 = LinearRegression()
 
-        base = MockStagecoachEstimator(stage1, stage2)
-
-        assert base.stage1_estimator is stage1
-        assert base.stage2_estimator is stage2
-        assert base.early_features is None
-        assert base.late_features is None
-        assert base.use_stage1_pred_as_feature is True
-        assert base.inner_cv is None
-        assert base.random_state is None
-        assert isinstance(base._stage1_cache, dict)
-        assert len(base._stage1_cache) == 0
-
-    def test_validate_features_dataframe(self, sample_data):
-        """Test feature validation with DataFrame."""
-        df, _, _ = sample_data
-        stage1 = LinearRegression()
-        stage2 = LinearRegression()
-
-        base = MockStagecoachEstimator(
-            stage1,
-            stage2,
-            early_features=["early_1", "early_2"],
-            late_features=["late_1", "late_2"],
+def test_state_shape_and_alignment_failures(data):
+    X, y = data
+    model = make_model().fit(X, y)
+    state = model.encode(X[["u", "v"]])
+    malformed = EncodedState(np.ones((len(X), 3)), state.encoder_id)
+    with pytest.raises(ValueError, match="representation width"):
+        model.predict_from_state(X[["item", "fresh"]], malformed)
+    with pytest.raises(ValueError, match="require state_indices"):
+        model.predict_from_state(X.iloc[:2][["item", "fresh"]], state)
+    with pytest.raises(ValueError, match="one entry per candidate"):
+        model.predict_from_state(
+            X.iloc[:2][["item", "fresh"]], state, state_indices=[1]
         )
 
-        # Should not raise any errors
-        base._validate_features(df)
 
-        assert hasattr(base, "feature_names_in_")
-        assert hasattr(base, "n_features_in_")
-        np.testing.assert_array_equal(base.feature_names_in_, df.columns)
-        assert base.n_features_in_ == 4
+@pytest.mark.parametrize("operation", ["predict", "encode", "predict_proba"])
+def test_unfitted_classifier(data, operation):
+    X, _ = data
+    with pytest.raises(NotFittedError):
+        getattr(make_model(True), operation)(X)
 
-    def test_validate_features_array(self, sample_data):
-        """Test feature validation with numpy array."""
-        _, array, _ = sample_data
-        stage1 = LinearRegression()
-        stage2 = LinearRegression()
 
-        base = MockStagecoachEstimator(stage1, stage2)
+@pytest.mark.parametrize("classifier", [False, True])
+def test_wrong_downstream_estimator_type(data, classifier):
+    X, y = data
+    model = make_model(classifier)
+    model.estimator = LinearRegression() if classifier else LogisticRegression()
+    with pytest.raises(ValueError, match="estimator must be"):
+        model.fit(X, y > 0 if classifier else y)
 
-        # Should not raise any errors
-        base._validate_features(array)
 
-        assert hasattr(base, "feature_names_in_")
-        assert hasattr(base, "n_features_in_")
-        assert base.feature_names_in_ is None
-        assert base.n_features_in_ == 4
+def test_categorical_upstream_pipeline(data):
+    from sklearn.preprocessing import OneHotEncoder
 
-    def test_validate_features_missing_early(self, sample_data):
-        """Test feature validation with missing early features."""
-        df, _, _ = sample_data
-        stage1 = LinearRegression()
-        stage2 = LinearRegression()
+    X, y = data
+    X = X.copy()
+    X["category"] = np.where(X.u > 0, "positive", "negative")
+    model = StagecoachRegressor(
+        OneHotEncoder(sparse_output=False, handle_unknown="ignore"),
+        LinearRegression(),
+        upstream_features=["category"],
+        online_features=["item", "fresh"],
+    ).fit(X, y)
+    state = model.encode(X[["category"]])
+    np.testing.assert_allclose(
+        model.predict_from_state(X[["item", "fresh"]], state), model.predict(X)
+    )
 
-        base = MockStagecoachEstimator(
-            stage1, stage2, early_features=["nonexistent_feature"]
+
+@pytest.mark.parametrize("classifier", [False, True])
+def test_integer_named_columns_reordered_at_prediction(data, classifier):
+    X, y = data
+    X = X.copy()
+    X.columns = [10, 20, 30, 40]
+    cls = StagecoachClassifier if classifier else StagecoachRegressor
+    estimator = LogisticRegression() if classifier else LinearRegression()
+    model = cls(
+        StandardScaler(),
+        estimator,
+        upstream_features=[0, 1],
+        online_features=[2, 3],
+    ).fit(X, y > 0 if classifier else y)
+    reordered = X[[40, 20, 10, 30]]
+    np.testing.assert_allclose(model.predict(reordered), model.predict(X))
+    if classifier:
+        np.testing.assert_allclose(
+            model.predict_proba(reordered), model.predict_proba(X)
         )
-
-        with pytest.raises(ValueError, match="Early features not found in data"):
-            base._validate_features(df)
-
-    def test_validate_features_missing_late(self, sample_data):
-        """Test feature validation with missing late features."""
-        df, _, _ = sample_data
-        stage1 = LinearRegression()
-        stage2 = LinearRegression()
-
-        base = MockStagecoachEstimator(
-            stage1, stage2, late_features=["nonexistent_feature"]
-        )
-
-        with pytest.raises(ValueError, match="Late features not found in data"):
-            base._validate_features(df)
-
-    def test_split_features_explicit_dataframe(self, sample_data):
-        """Test feature splitting with explicit feature names on DataFrame."""
-        df, _, _ = sample_data
-        stage1 = LinearRegression()
-        stage2 = LinearRegression()
-
-        base = MockStagecoachEstimator(
-            stage1,
-            stage2,
-            early_features=["early_1", "early_2"],
-            late_features=["late_1", "late_2"],
-        )
-
-        X_early, X_late = base._split_features(df)
-
-        assert isinstance(X_early, pd.DataFrame)
-        assert isinstance(X_late, pd.DataFrame)
-        assert list(X_early.columns) == ["early_1", "early_2"]
-        assert list(X_late.columns) == ["late_1", "late_2"]
-
-    def test_split_features_default_dataframe(self, sample_data):
-        """Test feature splitting with default behavior on DataFrame."""
-        df, _, _ = sample_data
-        stage1 = LinearRegression()
-        stage2 = LinearRegression()
-
-        base = MockStagecoachEstimator(stage1, stage2)
-
-        X_early, X_late = base._split_features(df)
-
-        assert isinstance(X_early, pd.DataFrame)
-        assert isinstance(X_late, pd.DataFrame)
-        assert len(X_early.columns) == 2  # First half
-        assert len(X_late.columns) == 2  # Second half
-
-    def test_split_features_array_with_stored_names(self, sample_data):
-        """Test feature splitting on array with stored feature names."""
-        df, array, _ = sample_data
-        stage1 = LinearRegression()
-        stage2 = LinearRegression()
-
-        base = MockStagecoachEstimator(
-            stage1,
-            stage2,
-            early_features=["early_1", "early_2"],
-            late_features=["late_1", "late_2"],
-        )
-
-        # First validate with DataFrame to store feature names
-        base._validate_features(df)
-
-        # Now split array using stored feature names
-        X_early, X_late = base._split_features(array)
-
-        assert isinstance(X_early, np.ndarray)
-        assert isinstance(X_late, np.ndarray)
-        assert X_early.shape == (5, 2)
-        assert X_late.shape == (5, 2)
-
-    def test_split_features_array_default(self, sample_data):
-        """Test feature splitting with default behavior on array."""
-        _, array, _ = sample_data
-        stage1 = LinearRegression()
-        stage2 = LinearRegression()
-
-        base = MockStagecoachEstimator(stage1, stage2)
-
-        X_early, X_late = base._split_features(array)
-
-        assert isinstance(X_early, np.ndarray)
-        assert isinstance(X_late, np.ndarray)
-        assert X_early.shape == (5, 2)  # First half
-        assert X_late.shape == (5, 2)  # Second half
-
-    def test_cache_functionality_dataframe(self, sample_data):
-        """Test stage1 caching with DataFrame."""
-        df, _, _ = sample_data
-        stage1 = LinearRegression()
-        stage2 = LinearRegression()
-
-        base = MockStagecoachEstimator(stage1, stage2)
-
-        X_early, _ = base._split_features(df)
-        predictions = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-
-        # Cache predictions
-        base.set_stage1_cache(X_early, predictions)
-
-        # Retrieve cached predictions
-        cached = base._get_cached_stage1_pred(X_early)
-
-        assert cached is not None
-        np.testing.assert_array_equal(cached, predictions)
-
-    def test_cache_functionality_array(self, sample_data):
-        """Test stage1 caching with array."""
-        _, array, _ = sample_data
-        stage1 = LinearRegression()
-        stage2 = LinearRegression()
-
-        base = MockStagecoachEstimator(stage1, stage2)
-
-        X_early, _ = base._split_features(array)
-        predictions = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-
-        # Cache predictions
-        base.set_stage1_cache(X_early, predictions)
-
-        # Retrieve cached predictions
-        cached = base._get_cached_stage1_pred(X_early)
-
-        assert cached is not None
-        np.testing.assert_array_equal(cached, predictions)
-
-    def test_clear_cache(self, sample_data):
-        """Test cache clearing functionality."""
-        df, _, _ = sample_data
-        stage1 = LinearRegression()
-        stage2 = LinearRegression()
-
-        base = MockStagecoachEstimator(stage1, stage2)
-
-        X_early, _ = base._split_features(df)
-        predictions = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-
-        # Cache predictions
-        base.set_stage1_cache(X_early, predictions)
-        assert len(base._stage1_cache) == 1
-
-        # Clear cache
-        base.clear_stage1_cache()
-        assert len(base._stage1_cache) == 0
-
-        # Should return None now
-        cached = base._get_cached_stage1_pred(X_early)
-        assert cached is None
-
-    def test_cache_key_generation_different_data(self, sample_data):
-        """Test that different data generates different cache keys."""
-        df, _, _ = sample_data
-        stage1 = LinearRegression()
-        stage2 = LinearRegression()
-
-        base = MockStagecoachEstimator(stage1, stage2)
-
-        X_early, _ = base._split_features(df)
-
-        # Create modified data
-        df_modified = df.copy()
-        df_modified.iloc[0, 0] = 999
-        X_early_modified, _ = base._split_features(df_modified)
-
-        key1 = base._get_cache_key(X_early)
-        key2 = base._get_cache_key(X_early_modified)
-
-        assert key1 != key2
-
-
-class TestValidationUtilities:
-    """Tests for validation utilities."""
-
-    def test_validate_estimator_regressor(self):
-        """Test regressor validation."""
-        regressor = LinearRegression()
-
-        # Should not raise
-        validate_estimator(regressor, "regressor")
-
-        # Should raise for wrong type
-        classifier = LogisticRegression()
-        with pytest.raises(ValueError, match="Expected regressor"):
-            validate_estimator(classifier, "regressor")
-
-    def test_validate_estimator_classifier(self):
-        """Test classifier validation."""
-        classifier = LogisticRegression()
-
-        # Should not raise
-        validate_estimator(classifier, "classifier")
-
-        # Should raise for wrong type
-        regressor = LinearRegression()
-        with pytest.raises(ValueError, match="Expected classifier"):
-            validate_estimator(regressor, "classifier")
-
-    def test_validate_cv_parameter_valid(self):
-        """Test valid CV parameter validation."""
-        # Should not raise
-        validate_cv_parameter(None)
-        validate_cv_parameter(3)
-        validate_cv_parameter(5)
-
-    def test_validate_cv_parameter_invalid(self):
-        """Test invalid CV parameter validation."""
-        with pytest.raises(
-            ValueError, match="inner_cv must be None or an integer >= 2"
-        ):
-            validate_cv_parameter(1)
-
-        with pytest.raises(
-            ValueError, match="inner_cv must be None or an integer >= 2"
-        ):
-            validate_cv_parameter("invalid")
-
-        with pytest.raises(
-            ValueError, match="inner_cv must be None or an integer >= 2"
-        ):
-            validate_cv_parameter(0)
-
-    def test_check_consistent_length_features_valid(self):
-        """Test feature consistency check with valid features."""
-        early_features = ["early_1", "early_2"]
-        late_features = ["late_1", "late_2"]
-
-        # Should not raise
-        check_consistent_length_features(early_features, late_features)
-
-    def test_check_consistent_length_features_overlap(self):
-        """Test feature consistency check with overlapping features."""
-        early_features = ["feature_1", "feature_2"]
-        late_features = ["feature_2", "feature_3"]  # feature_2 overlaps
-
-        with pytest.raises(ValueError, match="Features cannot be both early and late"):
-            check_consistent_length_features(early_features, late_features)
+    with pytest.raises(ValueError, match="missing fitted feature columns"):
+        model.predict(X[[10, 20, 30]])

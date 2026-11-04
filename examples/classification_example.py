@@ -1,63 +1,35 @@
-"""Two-stage classification example using the breast cancer dataset.
+"""Classification with a frozen encoder and a separate downstream training set."""
 
-This example demonstrates basic StagecoachClassifier usage with probability
-estimation and performance comparison.
-"""
-
+import numpy as np
 from sklearn.datasets import load_breast_cancer
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.decomposition import PCA
+from sklearn.frozen import FrozenEstimator
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import log_loss
 from sklearn.model_selection import train_test_split
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 from stagecoachml import StagecoachClassifier
 
-data = load_breast_cancer(as_frame=True)
-X = data.data
-y = data.target
 
-features = list(X.columns)
-mid = len(features) // 2
-early = features[:mid]
-late  = features[mid:]
+def main():
+    data = load_breast_cancer(as_frame=True)
+    upstream = [name for name in data.data.columns if name.startswith("mean ")]
+    online = [name for name in data.data.columns if name not in upstream]
+    X_train, X_test, y_train, y_test = train_test_split(data.data, data.target, random_state=0, stratify=data.target)
+    X_encoder, X_head, _, y_head = train_test_split(X_train, y_train, random_state=1, stratify=y_train)
+    encoder = make_pipeline(StandardScaler(), PCA(n_components=4)).fit(X_encoder[upstream])
+    model = StagecoachClassifier(
+        FrozenEstimator(encoder), make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000)),
+        upstream_features=upstream, online_features=online,
+    ).fit(X_head, y_head)
+    state = model.encode(X_test[upstream])
+    probability = model.predictor_.predict_proba(X_test[online], state)
+    np.testing.assert_allclose(probability, model.predict_proba(X_test))
+    print(f"Held-out log loss: {log_loss(y_test, probability):.3f}")
+    print(f"Representation width: {state.values.shape[1]}")
 
-print(f"Dataset: {len(X)} samples, {len(features)} features")
-print(f"Early features: {len(early)} features")
-print(f"Late features: {len(late)} features")
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=1, stratify=y
-)
-
-stage1_clf = LogisticRegression(max_iter=1000)
-stage2_clf = RandomForestClassifier(n_estimators=200, random_state=2)
-
-model = StagecoachClassifier(
-    stage1_estimator=stage1_clf,
-    stage2_estimator=stage2_clf,
-    early_features=early,
-    late_features=late,
-    use_stage1_pred_as_feature=True,
-)
-
-model.fit(X_train, y_train)
-
-def metrics(y_true, y_pred):
-    return accuracy_score(y_true, y_pred), f1_score(y_true, y_pred)
-
-# Provisional scores from early features only
-stage1_test_proba = model.predict_stage1_proba(X_test)
-stage1_acc, stage1_f1 = metrics(y_test, (stage1_test_proba >= 0.5).astype(int))
-
-# Final scores with all features
-final_acc, final_f1 = metrics(y_test, model.predict(X_test))
-
-print("\nResults:")
-print("Stage-1  test accuracy/F1:", f"{stage1_acc:.3f}/{stage1_f1:.3f}")
-print("Final    test accuracy/F1:", f"{final_acc:.3f}/{final_f1:.3f}")
-
-# Compare with single-stage baseline
-baseline = RandomForestClassifier(n_estimators=200, random_state=2)
-baseline.fit(X_train, y_train)
-baseline_acc, baseline_f1 = metrics(y_test, baseline.predict(X_test))
-print("Baseline test accuracy/F1:", f"{baseline_acc:.3f}/{baseline_f1:.3f}")
+if __name__ == "__main__":
+    main()
