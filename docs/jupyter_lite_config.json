@@ -5,13 +5,8 @@
       "pip"
     ]
   },
-  "PipliteAddon": {
-    "piplite_urls": ["https://pypi.org/simple"],
-    "wheels": []
-  },
   "jupyter-config-data": {
     "appName": "StagecoachML Examples",
-    "appVersion": "0.1.0",
     "appUrl": "./",
     "faviconUrl": "./favicon.ico",
     "fullAppUrl": "./lab/",
