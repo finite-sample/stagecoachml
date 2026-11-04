@@ -1,295 +1,176 @@
-"""Inference latency benchmark comparing staged vs single-stage models.
+"""Temporal candidate-scoring benchmark with explicit representation reuse.
 
-This example demonstrates the latency benefits of two-stage models when:
-1. Stage-1 predictions can be precomputed/cached
-2. Early decisions need to be made before all features are available
-3. Different stages have different computational requirements
-
-Use case: Ad serving where user/context features arrive first, then
-item/creative features are retrieved based on initial filtering.
+Run with ``python -m examples.inference_latency.latency_benchmark``. All data is
+synthetic; timings are local CPU measurements, not production serving estimates.
 """
 
+import argparse
+import json
+from time import perf_counter
+from unittest.mock import patch
+
 import numpy as np
-from profiler import LatencyProfiler
-from sklearn.datasets import fetch_california_housing
-from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
-from sklearn.model_selection import train_test_split
+import pandas as pd
+from sklearn.decomposition import PCA
+from sklearn.frozen import FrozenEstimator
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import brier_score_loss, log_loss, ndcg_score
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
-from stagecoachml import StagecoachRegressor
+from stagecoachml import PredictionEncoder, StagecoachClassifier
 
-
-def create_realistic_feature_split():
-    """Create a realistic early/late feature split for housing data.
-
-    Early features: Basic location and structural info (available immediately)
-    Late features: Derived stats and computed features (require more processing)
-    """
-    # Load California housing dataset
-    housing = fetch_california_housing(as_frame=True)
-    X = housing.data  # Features are separate from target
-    y = housing.target
-
-    # Split into early vs late features based on realistic availability
-    early_features = [
-        'Latitude',           # GPS coordinate (immediate)
-        'Longitude',          # GPS coordinate (immediate)
-        'HouseAge',           # Basic property info (immediate)
-        'AveRooms',          # Basic room count (immediate)
-    ]
-
-    late_features = [
-        'AveBedrms',         # Detailed room analysis (requires processing)
-        'Population',        # Census/demographic lookup (slower)
-        'AveOccup',         # Occupancy analysis (computed)
-        'MedInc',           # Income analysis (external API call)
-    ]
-
-    print(f"Dataset: {len(X)} samples, {len(X.columns)} features")
-    print(f"Early features ({len(early_features)}): {early_features}")
-    print(f"Late features ({len(late_features)}): {late_features}")
-    print()
-
-    return X, y, early_features, late_features
+UPSTREAM = [f"history_{i}" for i in range(8)]
+ONLINE = [f"item_{i}" for i in range(3)] + [f"session_{i}" for i in range(3)]
 
 
-def train_models(X_train, X_test, y_train, y_test, early_features, late_features):
-    """Train single-stage baseline and two-stage StagecoachML models."""
-    print("Training models...")
-
-    # Single-stage baseline: one model using all features
-    single_model = GradientBoostingRegressor(
-        n_estimators=100,
-        max_depth=6,
-        random_state=42
+def make_data(n_users=60, n_days=24, n_candidates=8, seed=42):
+    """Simulate user drift, semantic item attributes, and fresh session intent."""
+    rng = np.random.default_rng(seed)
+    base = rng.normal(size=(n_users, 3))
+    direction = rng.normal(size=(n_users, 3))
+    phase = rng.uniform(0, 2 * np.pi, size=(n_users, 1))
+    day = np.arange(n_days)[:, None, None]
+    preference = base[None] + np.sin(day / 4 + phase[None]) * direction[None]
+    projection = rng.normal(size=(3, 8))
+    history = preference @ projection + rng.normal(scale=0.15, size=(n_days, n_users, 8))
+    session = rng.normal(scale=0.7, size=(n_days, n_users, 3))
+    items = rng.normal(size=(n_days, n_users, n_candidates, 3))
+    intent = preference + session
+    logits = (items * intent[:, :, None, :]).sum(axis=-1) / 1.5 - 1.0
+    probability = 1 / (1 + np.exp(-logits))
+    y = rng.binomial(1, probability).ravel()
+    repeated_history = np.repeat(history[:, :, None, :], n_candidates, axis=2)
+    repeated_session = np.repeat(session[:, :, None, :], n_candidates, axis=2)
+    X = pd.DataFrame(
+        np.concatenate([repeated_history, items, repeated_session], axis=-1).reshape(-1, 14),
+        columns=UPSTREAM + ONLINE,
     )
-    single_model.fit(X_train, y_train)
+    days = np.repeat(np.arange(n_days), n_users * n_candidates)
+    return X, y, days, history
 
-    # Two-stage model: fast stage1 + more complex stage2
-    stage1_estimator = LinearRegression()  # Fast linear model for early filtering
-    stage2_estimator = RandomForestRegressor(  # More complex model for refinement
-        n_estimators=50,
-        max_depth=8,
-        random_state=42
+
+def ranker():
+    """Use the same interaction-capable head for each comparison."""
+    return make_pipeline(
+        PolynomialFeatures(degree=2, include_bias=False),
+        StandardScaler(),
+        LogisticRegression(C=0.1, max_iter=500),
     )
 
-    stagecoach_model = StagecoachRegressor(
-        stage1_estimator=stage1_estimator,
-        stage2_estimator=stage2_estimator,
-        early_features=early_features,
-        late_features=late_features,
-        residual=True,
-        use_stage1_pred_as_feature=True,
-        inner_cv=5,  # Cross-fit to avoid overfitting
-        random_state=42
+
+def quality(y, probability, n_candidates):
+    """Evaluate probability quality and ranking within each request."""
+    prevalence = np.mean(y)
+    entropy = -(prevalence * np.log(prevalence) + (1 - prevalence) * np.log(1 - prevalence))
+    bins = np.minimum((probability * 10).astype(int), 9)
+    calibration_error = sum(
+        np.mean(bins == b) * abs(np.mean(probability[bins == b]) - np.mean(y[bins == b]))
+        for b in range(10) if np.any(bins == b)
     )
-    stagecoach_model.fit(X_train, y_train)
-
-    # Evaluate accuracy
-    single_pred = single_model.predict(X_test)
-    stage1_pred = stagecoach_model.predict_stage1(X_test)
-    stagecoach_pred = stagecoach_model.predict(X_test)
-
-    print("Model Performance:")
-    print(f"Single-stage R²:     {r2_score(y_test, single_pred):.4f}")
-    print(f"Stage-1 only R²:     {r2_score(y_test, stage1_pred):.4f}")
-    print(f"Two-stage R²:        {r2_score(y_test, stagecoach_pred):.4f}")
-    print()
-
-    return single_model, stagecoach_model
+    return {
+        "log_loss": float(log_loss(y, probability)),
+        "normalized_entropy": float(log_loss(y, probability) / entropy),
+        "brier_score": float(brier_score_loss(y, probability)),
+        "calibration_error_10_bins": float(calibration_error),
+        "ndcg": float(ndcg_score(y.reshape(-1, n_candidates), probability.reshape(-1, n_candidates))),
+    }
 
 
-def benchmark_individual_predictions(single_model, stagecoach_model, X_test, n_samples=100):
-    """Benchmark individual prediction latency - the key use case."""
-    print(f"Benchmarking individual predictions ({n_samples} samples)...")
-
-    # Select random samples for timing
-    indices = np.random.choice(len(X_test), n_samples, replace=False)
-    test_samples = X_test.iloc[indices]
-
-    profiler = LatencyProfiler()
-
-    # Time individual predictions
-    for i in range(n_samples):
-        sample = test_samples.iloc[i:i+1]
-
-        # Single-stage model (all features required)
-        with profiler.profile('single_stage'):
-            _ = single_model.predict(sample)
-
-        # Stage-1 only (early features only - for initial filtering)
-        with profiler.profile('stage1_only'):
-            _ = stagecoach_model.predict_stage1(sample)
-
-        # Two-stage full prediction (both stages)
-        with profiler.profile('two_stage_fresh'):
-            _ = stagecoach_model.predict(sample)
-
-    # Now test with cached stage-1 predictions
-    print("Testing with precomputed stage-1 cache...")
-
-    # Precompute stage-1 for all test samples (simulation: batch processing)
-    X_early, _ = stagecoach_model._split_features(test_samples)
-    stage1_predictions = stagecoach_model.predict_stage1(test_samples)
-    stagecoach_model.set_stage1_cache(X_early, stage1_predictions)
-
-    # Time predictions with cached stage-1
-    for i in range(n_samples):
-        sample = test_samples.iloc[i:i+1]
-
-        # Two-stage with cached stage-1
-        with profiler.profile('two_stage_cached'):
-            _ = stagecoach_model.predict(sample)
-
-    # Clear cache
-    stagecoach_model.clear_stage1_cache()
-
-    return profiler
+def latency(predict_request, n_requests):
+    """Measure complete request calls after warmup, reporting CPU milliseconds."""
+    for request in range(min(10, n_requests)):
+        predict_request(request)
+    elapsed = []
+    for request in range(n_requests):
+        start = perf_counter()
+        predict_request(request)
+        elapsed.append((perf_counter() - start) * 1000)
+    return dict(zip(["p50_ms", "p95_ms", "p99_ms"], np.percentile(elapsed, [50, 95, 99]).tolist(), strict=True))
 
 
-def benchmark_batch_predictions(single_model, stagecoach_model, X_test, batch_sizes=None):
-    """Benchmark batch prediction performance."""
-    if batch_sizes is None:
-        batch_sizes = [1, 10, 100, 1000]
-    print("Benchmarking batch predictions...")
+def benchmark(n_users=60, n_candidates=8):
+    """Compare frozen scalar/vector bridges across representation widths and ages."""
+    X, y, days, history = make_data(n_users=n_users, n_candidates=n_candidates)
+    pretrain = days < 6
+    train = (days >= 6) & (days < 20)
+    test = days >= 20
+    X_test, y_test = X.loc[test].reset_index(drop=True), y[test]
+    online = X_test[ONLINE]
+    n_requests = len(X_test) // n_candidates
+    results = []
+    for name, columns in [("online_only", ONLINE), ("all_features_online", UPSTREAM + ONLINE)]:
+        model = ranker().fit(X.loc[train, columns], y[train])
+        probability = model.predict_proba(X_test[columns])[:, 1]
 
-    results = {}
+        def predict_request(request, model=model, columns=columns):
+            start = request * n_candidates
+            return model.predict_proba(X_test.iloc[start:start + n_candidates][columns])
 
-    for batch_size in batch_sizes:
-        if batch_size > len(X_test):
-            continue
+        results.append({"model": name, **quality(y_test, probability, n_candidates), **latency(predict_request, n_requests)})
 
-        # Select batch
-        batch = X_test.iloc[:batch_size]
+    encoders = [("scalar", PredictionEncoder(LogisticRegression(max_iter=500)).fit(X.loc[pretrain, UPSTREAM], y[pretrain]))]
+    history_pretrain = pd.DataFrame(history[:6].reshape(-1, 8), columns=UPSTREAM)
+    encoders.extend((f"vector_{width}", PCA(n_components=width).fit(history_pretrain)) for width in [2, 4, 8])
+    candidate_ids = np.repeat(np.arange(n_requests), n_candidates)
+    request_times = np.repeat(np.repeat(np.arange(20, 24), n_users), n_candidates) * 86400.0
+    for name, encoder in encoders:
+        model = StagecoachClassifier(
+            FrozenEstimator(encoder), ranker(),
+            upstream_features=UPSTREAM, online_features=ONLINE,
+        ).fit(X.loc[train], y[train])
+        for age in [0, 2, 7]:
+            snapshots = pd.DataFrame(history[20 - age:24 - age].reshape(-1, 8), columns=UPSTREAM)
+            start = perf_counter()
+            state = model.encode(
+                snapshots, entity_ids=np.arange(n_requests),
+                feature_times=np.repeat(np.arange(20 - age, 24 - age), n_users) * 86400.0,
+            )
+            preparation_ms = (perf_counter() - start) * 1000
+            with patch.object(model.encoder_, "transform", side_effect=AssertionError("Online scoring executed the encoder")) as upstream:
+                probability = model.predict_proba_from_state(
+                    online, state, state_indices=state.rows_for(candidate_ids),
+                    as_of=request_times, max_age=age * 86400.0,
+                )[:, 1]
 
-        profiler = LatencyProfiler()
+                def predict_request(request):
+                    start = request * n_candidates
+                    stop = start + n_candidates
+                    return model.predictor_.predict_proba(
+                        online.iloc[start:stop], state,
+                        state_indices=state.rows_for(candidate_ids[start:stop]),
+                        as_of=request_times[start:stop], max_age=age * 86400.0,
+                    )
 
-        # Time batch predictions (10 runs each)
-        for _ in range(10):
-            with profiler.profile('single_stage'):
-                _ = single_model.predict(batch)
-
-            with profiler.profile('two_stage'):
-                _ = stagecoach_model.predict(batch)
-
-        results[batch_size] = {
-            'single_stage': profiler.get_stats('single_stage'),
-            'two_stage': profiler.get_stats('two_stage')
-        }
-
-    return results
-
-
-def print_latency_results(profiler):
-    """Print formatted latency comparison results."""
-    print("=== Individual Prediction Latency Results ===")
-
-    scenarios = [
-        ('single_stage', 'Single-stage (all features)'),
-        ('stage1_only', 'Stage-1 only (early features)'),
-        ('two_stage_fresh', 'Two-stage (fresh computation)'),
-        ('two_stage_cached', 'Two-stage (cached stage-1)')
-    ]
-
-    print(f"{'Scenario':<35} {'Mean (ms)':<12} {'Median (ms)':<12} {'Std (ms)':<12}")
-    print("-" * 71)
-
-    for key, description in scenarios:
-        stats = profiler.get_stats(key)
-        if stats:
-            print(f"{description:<35} {stats['mean_ms']:<12.2f} {stats['median_ms']:<12.2f} {stats['std_ms']:<12.2f}")
-
-    print()
-
-    # Calculate speedup ratios
-    single_mean = profiler.get_stats('single_stage')['mean_ms']
-    stage1_mean = profiler.get_stats('stage1_only')['mean_ms']
-    cached_mean = profiler.get_stats('two_stage_cached')['mean_ms']
-
-    print("=== Speedup Analysis ===")
-    print(f"Stage-1 vs Single-stage:      {single_mean/stage1_mean:.1f}x faster")
-    print(f"Cached vs Single-stage:       {single_mean/cached_mean:.1f}x faster")
-    print(f"Cached vs Fresh two-stage:    {profiler.get_stats('two_stage_fresh')['mean_ms']/cached_mean:.1f}x faster")
-    print()
-
-
-def print_batch_results(batch_results):
-    """Print batch prediction results."""
-    print("=== Batch Prediction Results ===")
-    print(f"{'Batch Size':<12} {'Single (ms)':<12} {'Two-stage (ms)':<15} {'Speedup':<10}")
-    print("-" * 51)
-
-    for batch_size, results in batch_results.items():
-        single_ms = results['single_stage']['mean_ms']
-        two_stage_ms = results['two_stage']['mean_ms']
-        speedup = single_ms / two_stage_ms
-
-        print(f"{batch_size:<12} {single_ms:<12.2f} {two_stage_ms:<15.2f} {speedup:<10.2f}x")
-
-    print()
-
-
-def demonstrate_use_cases():
-    """Demonstrate practical use cases for two-stage models."""
-    print("=== Practical Use Cases ===")
-    print()
-
-    print("1. Real-time Ad Serving:")
-    print("   • Stage-1: Score user+context features (1-2ms budget)")
-    print("   • Filter to top 100 candidates")
-    print("   • Stage-2: Score with ad creative features (5-10ms budget)")
-    print("   • Benefit: Only run expensive features on promising candidates")
-    print()
-
-    print("2. Progressive Model Serving:")
-    print("   • Stage-1: Fast initial prediction when early features arrive")
-    print("   • User sees provisional result immediately")
-    print("   • Stage-2: Refine prediction when late features become available")
-    print("   • Benefit: Better user experience with progressive enhancement")
-    print()
-
-    print("3. Distributed Privacy-Preserving ML:")
-    print("   • Stage-1: Global model on non-sensitive features")
-    print("   • Stage-2: Local refinement on sensitive features (customer side)")
-    print("   • Benefit: Keep sensitive data local while leveraging global patterns")
-    print()
-
-
-def main():
-    """Run the complete inference latency benchmark."""
-    print("StagecoachML Inference Latency Benchmark")
-    print("=" * 50)
-    print()
-
-    # Load and prepare data
-    X, y, early_features, late_features = create_realistic_feature_split()
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
-
-    # Train models
-    single_model, stagecoach_model = train_models(
-        X_train, X_test, y_train, y_test, early_features, late_features
-    )
-
-    # Benchmark individual predictions (key use case)
-    profiler = benchmark_individual_predictions(single_model, stagecoach_model, X_test)
-    print_latency_results(profiler)
-
-    # Benchmark batch predictions
-    batch_results = benchmark_batch_predictions(single_model, stagecoach_model, X_test)
-    print_batch_results(batch_results)
-
-    # Show practical applications
-    demonstrate_use_cases()
-
-    print("=== Key Takeaways ===")
-    print("• Stage-1 predictions are much faster for early filtering/decisions")
-    print("• Caching stage-1 predictions provides significant speedup")
-    print("• Two-stage models enable progressive enhancement of predictions")
-    print("• Best suited for scenarios with staggered feature availability")
+                timing = latency(predict_request, n_requests)
+                assert upstream.call_count == 0
+            if age == 0:
+                np.testing.assert_allclose(probability, model.predict_proba(X_test)[:, 1])
+            results.append({
+                "model": name,
+                "state_age_days": age,
+                "representation_width": state.values.shape[1],
+                "representation_values_bytes": state.values.nbytes,
+                "state_preparation_ms": preparation_ms,
+                "preparation_ms_per_candidate": preparation_ms / len(X_test),
+                "candidates_per_state": n_candidates,
+                "online_encoder_calls": upstream.call_count,
+                **quality(y_test, probability, n_candidates), **timing,
+            })
+    return {
+        "description": "Synthetic temporal experiment; illustrative quality and local CPU latency, no network or feature-store cost.",
+        "training": "Encoder: days 0-5; downstream: days 6-19; evaluation: days 20-23. No future observations enter training.",
+        "freshness": "Downstream training uses fresh snapshots; age sweeps measure degradation without retraining.",
+        "n_users": n_users, "candidates_per_request": n_candidates, "n_test_requests": n_requests,
+        "results": results,
+    }
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--users", type=int, default=60)
+    parser.add_argument("--candidates", type=int, default=8)
+    args = parser.parse_args()
+    if args.users < 2 or args.candidates < 2:
+        parser.error("--users and --candidates must both be at least 2")
+    print(json.dumps(benchmark(args.users, args.candidates), indent=2))

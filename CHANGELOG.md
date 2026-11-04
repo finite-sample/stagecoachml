@@ -11,7 +11,36 @@ Entries for 0.1.0 and 0.1.2, and the description of 0.2.0, were reconstructed
 from the diffs between the released commits; there was no changelog while those
 versions shipped.
 
-## [Unreleased]
+## Unreleased
+
+## 0.3.0 - 2026-11-03
+
+### Added
+
+- Explicit `EncodedState` with entity mappings, fitted encoder identifiers, and
+  optional feature cutoff times and freshness checks.
+- `PredictionEncoder`, vector transformer support, frozen encoder training, and an
+  encoder-free `OnlinePredictor` artifact at `model.predictor_`.
+- Independent `encode`, `predict_from_state`, and `predict_proba_from_state` APIs.
+- Grouped and forward-only prediction cross-fitting, with consistent sample weights
+  and explicit exclusion of rows never held out by a splitter.
+- A synthetic temporal candidate-scoring benchmark covering representation width,
+  staleness, quality, preparation cost, and request latency.
+
+### Maintenance
+
+- Updated audited development/documentation dependency pins and aligned citation
+  version metadata with the published release. CI covers Python 3.12 and 3.14.
+- Browser documentation bundles the checkout wheel for its executable notebook.
+
+### Breaking changes
+
+- Estimators now take `encoder`, `estimator`, `upstream_features`, `online_features`,
+  and optional `cv`. Automatic half-column splitting is removed.
+- The stage-1 prediction methods and implicit batch cache are replaced by explicit
+  prepared state. Regression now defaults to direct prediction; residual learning
+  must be enabled explicitly.
+- Requires scikit-learn 1.6 or newer for frozen encoder support.
 
 ### Changed
 
@@ -20,14 +49,15 @@ versions shipped.
   configuration.
 - Estimator docstrings converted from NumPy to Google style, and public
   methods given type hints.
-- `predict`/`fit` on both estimators now assemble the stage-2 design matrix
-  through one shared helper instead of two copies of the same branching.
 
 ### Fixed
 
+- Reorder integer-labeled DataFrames using their fitted schema during full prediction.
+- Reject nonboolean residual settings before training.
+- Entity identifiers retain their original types during state creation and lookup,
+  preventing integer and string IDs from silently selecting the same representation.
 - The quickstart and examples pages documented a `Pipeline`/`Stage` API that
   the package does not have; both now describe the real estimators.
-- `check_consistent_length_features` no longer takes an unused `X` argument.
 
 ### Removed
 
@@ -87,7 +117,6 @@ No 0.1.1 was published; the version went 0.1.0 to 0.1.2.
   memory use.
 - Regression and classification examples, and a latency benchmark.
 
-[Unreleased]: https://github.com/finite-sample/stagecoachml/compare/v0.2.0...main
 [0.2.0]: https://github.com/finite-sample/stagecoachml/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/finite-sample/stagecoachml/compare/v0.1.0...v0.1.2
 [0.1.0]: https://github.com/finite-sample/stagecoachml/releases/tag/v0.1.0

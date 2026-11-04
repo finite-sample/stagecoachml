@@ -1,67 +1,31 @@
-"""Two-stage regression example using the diabetes dataset.
+"""Residual regression with explicit preparation and online serving."""
 
-This example demonstrates basic StagecoachRegressor usage with feature splitting,
-hyperparameter tuning, and performance comparison.
-"""
-
+import numpy as np
 from sklearn.datasets import load_diabetes
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import Ridge
 from sklearn.metrics import r2_score
 from sklearn.model_selection import GridSearchCV, train_test_split
 
-from stagecoachml import StagecoachRegressor
+from stagecoachml import PredictionEncoder, StagecoachRegressor
 
-# Load data as a DataFrame
-diabetes = load_diabetes(as_frame=True)
-X = diabetes.frame.drop(columns=["target"])
-y = diabetes.frame["target"]
 
-# Split columns into "early" and "late" features
-features = list(X.columns)
-mid = len(features) // 2
-early_features = features[:mid]   # pretend these arrive early
-late_features  = features[mid:]   # pretend these arrive later
+def main():
+    data = load_diabetes(as_frame=True)
+    X_train, X_test, y_train, y_test = train_test_split(data.data, data.target, random_state=0)
+    upstream = ["age", "sex", "bmi", "bp"]
+    online = [name for name in data.data.columns if name not in upstream]
+    model = StagecoachRegressor(
+        PredictionEncoder(Ridge()), Ridge(), upstream_features=upstream,
+        online_features=online, residual=True, cv=5,
+    )
+    search = GridSearchCV(model, {"encoder__estimator__alpha": [0.1, 1.0], "estimator__alpha": [0.1, 1.0]}, cv=3).fit(X_train, y_train)
+    model = search.best_estimator_
+    state = model.encode(X_test[upstream])
+    predicted = model.predictor_.predict(X_test[online], state)
+    np.testing.assert_allclose(predicted, model.predict(X_test))
+    print(f"Upstream R2: {r2_score(y_test, state.values[:, 0]):.3f}")
+    print(f"Final R2: {r2_score(y_test, predicted):.3f}")
 
-print(f"Dataset: {len(X)} samples, {len(features)} features")
-print(f"Early features: {early_features}")
-print(f"Late features: {late_features}")
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=0
-)
-
-# Stage-1: fast global model on early features
-stage1 = LinearRegression()
-
-# Stage-2: more flexible model on late features + stage-1 prediction
-stage2 = RandomForestRegressor(n_estimators=200, random_state=0)
-
-model = StagecoachRegressor(
-    stage1_estimator=stage1,
-    stage2_estimator=stage2,
-    early_features=early_features,
-    late_features=late_features,
-    residual=True,
-    use_stage1_pred_as_feature=True,
-    inner_cv=None,            # set >1 to cross-fit stage-1 preds if you care
-)
-
-# Hyper-parameter search over both stages
-param_grid = {
-    "stage1_estimator__fit_intercept": [True, False],
-    "stage2_estimator__max_depth": [None, 5, 10],
-}
-grid = GridSearchCV(model, param_grid, cv=5)
-grid.fit(X_train, y_train)
-
-best = grid.best_estimator_
-
-print("\nResults:")
-print("Stage-1 test R²: ", r2_score(y_test, best.predict_stage1(X_test)))
-print("Final   test R²: ", r2_score(y_test, best.predict(X_test)))
-
-# Compare with single-stage baseline
-baseline = RandomForestRegressor(n_estimators=200, random_state=0)
-baseline.fit(X_train, y_train)
-print("Baseline test R²:", r2_score(y_test, baseline.predict(X_test)))
+if __name__ == "__main__":
+    main()
