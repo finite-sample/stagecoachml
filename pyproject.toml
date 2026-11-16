@@ -155,11 +155,6 @@ check-class-attributes = false
 allow-init-docstring = true
 exclude = '\.venv|tests|docs'
 
-[tool.preen]
-# Resolves only once this file is on the default branch; on a feature branch
-# the link check sees a 404 for a file that is right there in the diff.
-link_ignore = ["github.com/finite-sample/stagecoachml/blob/main/CHANGELOG.md"]
-
 [dependency-groups]
 dev = [
     "ruff>=0.17.3",

@@ -1,0 +1,7 @@
+# Patterns are written without a scheme: preen's links check scans this file
+# too, and a pattern with one would be extracted and checked as a link.
+exclude = [
+  # Resolves only once the file is on the default branch; on a feature branch
+  # the link check sees a 404 for a file that is right there in the diff.
+  'github\.com/finite-sample/stagecoachml/blob/main/CHANGELOG\.md',
+]
