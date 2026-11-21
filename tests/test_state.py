@@ -103,4 +103,5 @@ def test_serialized_state_reuses_entities_and_preserves_readonly_arrays():
         np.testing.assert_array_equal(candidate.rows_for(["x", "a", "x"]), [1, 2, 1])
         np.testing.assert_array_equal(candidate.rows_for(["z"]), [0])
         for arr in (candidate.values, candidate.entity_ids, candidate.feature_times):
-            assert not arr.flags.writeable
+            with pytest.raises(ValueError, match="read-only"):
+                arr[0] = arr[1]
