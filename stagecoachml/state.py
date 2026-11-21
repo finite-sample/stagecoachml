@@ -1,6 +1,7 @@
 """Portable representations shared between preparation and online scoring."""
 
 from dataclasses import dataclass
+from functools import cached_property
 
 import numpy as np
 import pandas as pd
@@ -60,15 +61,29 @@ class EncodedState:
             ids = np.asarray(self.entity_ids, dtype=object).copy()
             if ids.shape != (len(values),):
                 raise ValueError("entity_ids must have one entry per representation")
-            index = pd.Index(ids)
-            if index.hasnans or not index.is_unique:
-                raise ValueError("entity_ids must be unique and nonmissing")
             ids.setflags(write=False)
             object.__setattr__(self, "entity_ids", ids)
+            index = self._entity_index
+            if index.hasnans or not index.is_unique:
+                raise ValueError("entity_ids must be unique and nonmissing")
         if self.feature_times is not None:
             times = timestamps(self.feature_times, len(values))
             times.setflags(write=False)
             object.__setattr__(self, "feature_times", times)
+
+    @cached_property
+    def _entity_index(self) -> pd.Index:
+        return pd.Index(self.entity_ids)
+
+    def __getstate__(self) -> dict:
+        # The pandas lookup engine is derived locally from the serialized IDs.
+        return {k: v for k, v in vars(self).items() if k != "_entity_index"}
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state)
+        for array in (self.values, self.entity_ids, self.feature_times):
+            if array is not None:
+                array.setflags(write=False)
 
     def rows_for(self, entity_ids: object) -> np.ndarray:
         """Map candidate entity identifiers to representation rows, preserving order.
@@ -87,7 +102,7 @@ class EncodedState:
         requested = np.asarray(entity_ids, dtype=object)
         if requested.ndim != 1 or requested.size == 0:
             raise ValueError("Requested entity_ids must be a nonempty vector")
-        indices = pd.Index(self.entity_ids).get_indexer(requested)
+        indices = self._entity_index.get_indexer(requested)
         if np.any(indices < 0):
             raise ValueError(
                 "No representation is available for one or more entity_ids"

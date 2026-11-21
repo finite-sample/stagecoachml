@@ -13,6 +13,10 @@ versions shipped.
 
 ## Unreleased
 
+### Performance
+
+- Prepared states reuse their validated entity index for repeated candidate lookups, including after serialization.
+
 ## 0.3.0 - 2026-11-03
 
 ### Added

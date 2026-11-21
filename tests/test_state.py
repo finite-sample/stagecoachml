@@ -1,5 +1,7 @@
 """Representation alignment, ownership and freshness validation."""
 
+import pickle
+
 import numpy as np
 import pytest
 
@@ -92,3 +94,14 @@ def test_entity_lookup_does_not_coerce_unknown_identifier():
     state = EncodedState(np.ones((2, 1)), "encoder", [1, "two"])
     with pytest.raises(ValueError, match="No representation"):
         state.rows_for(["1"])
+
+
+def test_serialized_state_reuses_entities_and_preserves_readonly_arrays():
+    state = EncodedState(np.ones((3, 1)), "encoder", ["z", "x", "a"], [1, 2, 3])
+    restored = pickle.loads(pickle.dumps(state))  # noqa: S301
+    for candidate in (state, restored):
+        np.testing.assert_array_equal(candidate.rows_for(["x", "a", "x"]), [1, 2, 1])
+        np.testing.assert_array_equal(candidate.rows_for(["z"]), [0])
+        for arr in (candidate.values, candidate.entity_ids, candidate.feature_times):
+            with pytest.raises(ValueError, match="read-only"):
+                arr[0] = arr[1]
